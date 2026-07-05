@@ -1,0 +1,88 @@
+#pragma once
+#include "NodeTypes.h"
+#include <glm/glm.hpp>
+#include <string>
+#include <vector>
+#include <memory>
+#include <unordered_map>
+
+using NodeId = uint32_t;
+using PinId  = uint32_t;
+using LinkId = uint32_t;
+
+static constexpr NodeId  INVALID_NODE = 0;
+static constexpr PinId   INVALID_PIN  = 0;
+static constexpr LinkId  INVALID_LINK = 0;
+
+struct Pin {
+    PinId  id     = INVALID_PIN;
+    NodeId owner  = INVALID_NODE;
+    bool   input  = false;   // true=输入 false=输出
+};
+
+struct Link {
+    LinkId id      = INVALID_LINK;
+    PinId  fromPin = INVALID_PIN;  // 上游节点输出Pin
+    PinId  toPin   = INVALID_PIN;  // 下游节点输入Pin
+};
+
+// 抽象节点基类
+class TreeNode {
+public:
+    NodeId    id      = INVALID_NODE;
+    NodeType  type;
+    glm::vec2 editorPos = {0.0f, 0.0f};
+    bool      dirty   = true;
+
+    Pin              outputPin;
+    std::vector<Pin> inputPins;   // 当前版本每个节点只有1个输入
+
+    virtual ~TreeNode() = default;
+    virtual NodeType    getType()  const = 0;
+    virtual const char* getLabel() const = 0;
+    // 绘制属性面板，返回true表示参数被修改
+    virtual bool drawProperties() = 0;
+};
+
+class NodeGraph {
+public:
+    NodeId   addNode(NodeType type, glm::vec2 pos = {0.0f, 0.0f});
+    void     removeNode(NodeId id);
+    TreeNode* getNode(NodeId id);
+    const std::unordered_map<NodeId, std::unique_ptr<TreeNode>>& nodes() const;
+
+    LinkId   addLink(PinId fromPin, PinId toPin);
+    void     removeLink(LinkId id);
+    const std::vector<Link>& links() const { return m_links; }
+
+    // 按pin查link
+    LinkId   linkFromPin(PinId pin) const;
+
+    // 顺Link找子节点（输出Pin -> 下游节点）
+    std::vector<TreeNode*> childrenOf(NodeId id) const;
+    // 找根节点（没有输入连接的Trunk）
+    TreeNode* rootNode() const;
+
+    void markDirty();
+    bool isDirty() const { return m_dirty; }
+    void clearDirty()    { m_dirty = false; }
+
+    // 构建默认模板（Trunk->Branch->Twig->LeafCluster）
+    void buildDefaultTemplate();
+
+    // 便捷：添加子节点并自动连线到parent的outputPin
+    NodeId addChildNode(NodeId parentId, NodeType type);
+
+private:
+    std::unordered_map<NodeId, std::unique_ptr<TreeNode>> m_nodes;
+    std::vector<Link> m_links;
+    NodeId   m_nextNodeId = 1;
+    PinId    m_nextPinId  = 1;
+    LinkId   m_nextLinkId = 1;
+    bool     m_dirty      = true;
+
+    // Pin -> owner node，用于反查
+    std::unordered_map<PinId, NodeId> m_pinOwner;
+    // Pin -> Link
+    std::unordered_map<PinId, LinkId> m_pinToLink;
+};

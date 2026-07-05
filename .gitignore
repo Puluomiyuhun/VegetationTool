@@ -1,0 +1,29 @@
+# Build outputs
+build/
+out/
+*.exe
+*.pdb
+*.ilk
+*.exp
+*.lib
+!external/**/*.lib
+
+# IDE
+.vs/
+*.user
+*.suo
+*.sdf
+*.opensdf
+.vscode/
+.idea/
+*.code-workspace
+
+# vcpkg installed packages (reproduced by cmake configure)
+build/vcpkg_installed/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Compiled shaders cache
+*.spv
