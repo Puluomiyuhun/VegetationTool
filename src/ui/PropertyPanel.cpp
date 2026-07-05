@@ -5,18 +5,18 @@ void PropertyPanel::render(NodeId selectedNodeId, NodeGraph& graph) {
     ImGui::Begin("Properties");
 
     if (selectedNodeId == INVALID_NODE) {
-        ImGui::TextDisabled("点击节点选中后可在此编辑参数");
+        ImGui::TextDisabled("Click a node to edit its parameters here.");
         ImGui::Spacing();
         ImGui::Separator();
         ImGui::Spacing();
-        ImGui::TextColored({0.7f,0.8f,1.0f,1.0f}, "操作说明:");
-        ImGui::BulletText("左键单击节点 - 选中");
-        ImGui::BulletText("左键拖动节点 - 移动");
-        ImGui::BulletText("从Out拖向In - 连线");
-        ImGui::BulletText("右键空白处 - 添加节点");
-        ImGui::BulletText("右键节点 - 删除节点");
-        ImGui::BulletText("Delete键 - 删除选中");
-        ImGui::BulletText("滚轮 - 缩放节点图");
+        ImGui::TextColored({0.7f,0.8f,1.0f,1.0f}, "Controls:");
+        ImGui::BulletText("Left-click node       - Select");
+        ImGui::BulletText("Left-drag node        - Move");
+        ImGui::BulletText("Drag Out -> In        - Connect");
+        ImGui::BulletText("Right-click canvas    - Add node");
+        ImGui::BulletText("Right-click node      - Delete node");
+        ImGui::BulletText("Delete key            - Delete selected");
+        ImGui::BulletText("Scroll wheel          - Zoom graph");
         ImGui::End();
         return;
     }
@@ -38,10 +38,10 @@ void PropertyPanel::render(NodeId selectedNodeId, NodeGraph& graph) {
     ImGui::Separator();
     ImGui::Spacing();
 
-    // 快速添加子节点
-    ImGui::TextColored({0.7f,0.9f,0.7f,1.0f}, "添加子节点:");
+    // Add child node shortcuts
+    ImGui::TextColored({0.7f,0.9f,0.7f,1.0f}, "Add Child:");
     ImGui::SameLine();
-    ImGui::TextDisabled("(自动连线到此节点)");
+    ImGui::TextDisabled("(auto-wired to this node)");
 
     auto addChildBtn = [&](const char* label, NodeType type) {
         if (ImGui::Button(label)) {
