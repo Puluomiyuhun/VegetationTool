@@ -1,7 +1,35 @@
 #include "UIManager.h"
+#include "io/ProjectIO.h"
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
+
+#ifdef _WIN32
+#include <windows.h>
+#include <commdlg.h>
+// 工程文件的打开/保存对话框（.vtree）。save=true 时为“另存为”。
+static std::string projectFileDialog(bool save) {
+    char szFile[1024] = {0};
+    OPENFILENAMEA ofn = {0};
+    ofn.lStructSize = sizeof(ofn);
+    ofn.lpstrFile   = szFile;
+    ofn.nMaxFile    = sizeof(szFile);
+    ofn.lpstrFilter = "Vegetation Tree (*.vtree)\0*.vtree\0All\0*.*\0";
+    ofn.nFilterIndex = 1;
+    ofn.lpstrDefExt  = "vtree";
+    if (save) {
+        ofn.Flags = OFN_OVERWRITEPROMPT | OFN_NOCHANGEDIR;
+        if (GetSaveFileNameA(&ofn)) return std::string(szFile);
+    } else {
+        ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST | OFN_NOCHANGEDIR;
+        if (GetOpenFileNameA(&ofn)) return std::string(szFile);
+    }
+    return std::string();
+}
+#else
+static std::string projectFileDialog(bool) { return std::string(); }
+#endif
+
 
 // 专业深色主题 (类 Blender/Unreal 风格)
 static void applyProfessionalTheme() {
@@ -170,6 +198,20 @@ void UIManager::render(NodeGraph& graph, NodeId& selectedNodeId,
         if (ImGui::BeginMenu("File")) {
             if (ImGui::MenuItem("New Tree"))
                 graph.buildDefaultTemplate();
+            ImGui::Separator();
+            if (ImGui::MenuItem("Open Project...")) {
+                std::string path = projectFileDialog(false);
+                if (!path.empty()) {
+                    if (ProjectIO::load(graph, path)) {
+                        selectedNodeId = INVALID_NODE;
+                        m_nodeEditor.requestReposition();
+                    }
+                }
+            }
+            if (ImGui::MenuItem("Save Project...")) {
+                std::string path = projectFileDialog(true);
+                if (!path.empty()) ProjectIO::save(graph, path);
+            }
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("Tree")) {

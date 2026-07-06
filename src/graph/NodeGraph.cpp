@@ -145,13 +145,19 @@ TreeNode* NodeGraph::rootNode() const {
 
 void NodeGraph::markDirty() { m_dirty = true; }
 
-void NodeGraph::buildDefaultTemplate() {    m_nodes.clear();
+void NodeGraph::clear() {
+    m_nodes.clear();
     m_links.clear();
     m_pinOwner.clear();
     m_pinToLink.clear();
     m_nextNodeId = 1;
     m_nextPinId  = 10000;
     m_nextLinkId = 100000;
+    m_dirty = true;
+}
+
+void NodeGraph::buildDefaultTemplate() {
+    clear();
 
     NodeId trunk  = addNode(NodeType::Trunk,       {100.0f, 200.0f});
     NodeId branch = addNode(NodeType::Branch,      {320.0f, 200.0f});

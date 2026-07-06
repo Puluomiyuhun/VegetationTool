@@ -17,6 +17,8 @@ struct MaterialParams {
     std::string baseColorTex;   // 替代 albedo
     std::string roughnessTex;   // R通道=roughness, G通道=metallic（可选）
     std::string normalTex;      // 切线空间法线贴图
+    std::string opacityTex;     // 不透明度遮罩(R通道)，用于叶片alpha剔除
+    float       alphaCutoff = 0.5f;  // alpha剔除阈值：低于此值的片元被丢弃
 };
 
 struct TrunkParams {
@@ -44,6 +46,8 @@ struct BranchParams {
     float spreadAngle  = 50.0f;
     float rotateOffset = 137.5f;
     float gravity      = 0.18f;
+    float regionStart  = 0.2f;   // 在父级[start,end]区间内生长, 此区间外的枝条剔除
+    float regionEnd    = 0.95f;
     float noiseAmount  = 30.0f;  // 样条噪声扰动强度(度)
     float noiseFreq    = 3.0f;   // 噪声频率
     float gnarl        = 10.0f;  // 螺旋扭曲总角度(度)
@@ -64,6 +68,8 @@ struct TwigParams {
     float spreadAngle  = 65.0f;
     float rotateOffset = 137.5f;
     float gravity      = 0.25f;
+    float regionStart  = 0.2f;   // 在父级[start,end]区间内生长, 此区间外的细枝剔除
+    float regionEnd    = 0.95f;
     float noiseAmount  = 35.0f;  // 样条噪声扰动强度(度)
     float noiseFreq    = 3.5f;   // 噪声频率
     float gnarl        = 8.0f;   // 螺旋扭曲总角度(度)

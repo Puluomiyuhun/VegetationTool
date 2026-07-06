@@ -63,6 +63,11 @@ static bool drawMaterial(MaterialParams& m, bool hasSSS = false) {
     texRow("BaseColor",                "##bc", m.baseColorTex);
     texRow("Roughness(R)/Metallic(G)", "##ro", m.roughnessTex);
     texRow("Normal Map",               "##nr", m.normalTex);
+    if (hasSSS) {
+        // 叶片：不透明度遮罩 + alpha 剔除阈值
+        texRow("Opacity Mask (R)",     "##op", m.opacityTex);
+        changed |= ImGui::SliderFloat("Alpha Cutoff", &m.alphaCutoff, 0.0f, 1.0f);
+    }
     return changed;
 }
 
@@ -102,6 +107,8 @@ bool BranchNode::drawProperties() {
     if (ImGui::CollapsingHeader("Generation", ImGuiTreeNodeFlags_DefaultOpen)) {
         changed |= ImGui::SliderInt  ("Branch Count",  &params.branchCount,  1, 8);
         changed |= ImGui::SliderFloat("Rotate Offset", &params.rotateOffset, 0.0f, 360.0f);
+        changed |= ImGui::SliderFloat("Region Start",  &params.regionStart,  0.0f, 1.0f);
+        changed |= ImGui::SliderFloat("Region End",    &params.regionEnd,    0.0f, 1.0f);
         changed |= ImGui::SliderInt  ("Seed",          &params.seed,         0, 999);
     }
     // Spine：单根枝条形态 —— 长度、粗细、下垂、弯曲
@@ -137,6 +144,8 @@ bool TwigNode::drawProperties() {
     if (ImGui::CollapsingHeader("Generation", ImGuiTreeNodeFlags_DefaultOpen)) {
         changed |= ImGui::SliderInt  ("Twig Count",    &params.twigCount,    1, 10);
         changed |= ImGui::SliderFloat("Rotate Offset", &params.rotateOffset, 0.0f, 360.0f);
+        changed |= ImGui::SliderFloat("Region Start",  &params.regionStart,  0.0f, 1.0f);
+        changed |= ImGui::SliderFloat("Region End",    &params.regionEnd,    0.0f, 1.0f);
         changed |= ImGui::Checkbox   ("Alternating",   &params.alternating);
         changed |= ImGui::SliderInt  ("Seed",          &params.seed,         0, 999);
     }

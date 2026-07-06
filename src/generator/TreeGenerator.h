@@ -41,6 +41,7 @@ private:
         const std::vector<BranchRing>& parentRings);
 
     void buildLeafCluster(const LeafClusterNode* node,
+        const std::vector<BranchRing>* parentRings,
         glm::vec3 origin, glm::vec3 dir);
 
     // 从rings按比例t(0-1)插值出附着点、切线方向、right轴、半径

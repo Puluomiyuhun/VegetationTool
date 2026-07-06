@@ -70,6 +70,9 @@ public:
     // 构建默认模板（Trunk->Branch->Twig->LeafCluster）
     void buildDefaultTemplate();
 
+    // 清空整个图并重置 ID 计数器（用于新建/读取工程）
+    void clear();
+
     // 便捷：添加子节点并自动连线到parent的outputPin
     NodeId addChildNode(NodeId parentId, NodeType type);
 

@@ -21,6 +21,7 @@ void Renderer::shutdown() {
         b.texBaseColor.destroy();
         b.texRoughness.destroy();
         b.texNormal.destroy();
+        b.texOpacity.destroy();
     }
     m_batches.clear();
     m_gridMesh.destroy();
@@ -32,6 +33,7 @@ void Renderer::uploadTreeMesh(const TreeMeshData& data) {
         b.texBaseColor.destroy();
         b.texRoughness.destroy();
         b.texNormal.destroy();
+        b.texOpacity.destroy();
     }
     m_batches.clear();
 
@@ -54,6 +56,8 @@ void Renderer::uploadTreeMesh(const TreeMeshData& data) {
             gb.texRoughness.loadFromFile(batch.material.roughnessTex, false);
         if (!batch.material.normalTex.empty())
             gb.texNormal.loadFromFile(batch.material.normalTex, false);
+        if (!batch.material.opacityTex.empty())
+            gb.texOpacity.loadFromFile(batch.material.opacityTex, false);
 
         m_batches.push_back(std::move(gb));
     }
@@ -79,6 +83,10 @@ void Renderer::bindBatchTextures(Shader& sh, GpuBatch& gb) {
     sh.setInt("uTexNormal",    2);
     sh.setInt("uHasNormal",    gb.texNormal.valid() ? 1 : 0);
     if (gb.texNormal.valid()) gb.texNormal.bind(2);
+
+    sh.setInt("uTexOpacity",   3);
+    sh.setInt("uHasOpacity",   gb.texOpacity.valid() ? 1 : 0);
+    if (gb.texOpacity.valid()) gb.texOpacity.bind(3);
 }
 
 void Renderer::render(const OrbitCamera& camera, float aspect, bool wireframe) {
@@ -106,6 +114,7 @@ void Renderer::render(const OrbitCamera& camera, float aspect, bool wireframe) {
             m_leafShader.setFloat("uRoughness",   gb.material.roughness);
             m_leafShader.setFloat("uAoStrength",  gb.material.aoStrength);
             m_leafShader.setFloat("uSssStrength", gb.material.sssStrength);
+            m_leafShader.setFloat("uAlphaCutoff", gb.material.alphaCutoff);
             setLightUniforms(m_leafShader);
             bindBatchTextures(m_leafShader, gb);
             gb.mesh.draw();

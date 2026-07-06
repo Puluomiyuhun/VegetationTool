@@ -120,7 +120,7 @@ void TreeGenerator::appendCollar(MeshBatch& batch,
     glm::vec3 fwd     = glm::cross(childUp, childRight);
 
     // 外圈外扩宽度：限制在父级半径范围内，否则底盘会绕过树干、边缘悬空出头
-    float flareWidth = std::min(startR * (baseFlare - 1.0f), parentR * 0.6f);
+    float flareWidth = std::min(startR * (baseFlare - 1.0f), parentR * 0.95f);
     float outerR     = startR + flareWidth;
     // childBase 在父级轴上的投影位置，用于把裙边压扁、紧贴附着点
     float baseAxial  = glm::dot(childBase - parentC, parentA);
@@ -150,7 +150,8 @@ void TreeGenerator::appendCollar(MeshBatch& batch,
                 // 外圈：外扩后投影到父级表面，并把轴向位置向附着点收拢(裙边压扁)
                 glm::vec3 flared = childBase + localDir * outerR;
                 glm::vec3 v      = flared - parentC;
-                float     axial  = glm::mix(baseAxial, glm::dot(v, parentA), 0.5f);
+                // 让裙边更多地沿父级表面延展(0.85)而非过度压扁，闭合下侧缝隙
+                float     axial  = glm::mix(baseAxial, glm::dot(v, parentA), 0.85f);
                 glm::vec3 radial = v - parentA * glm::dot(v, parentA);
                 float len = glm::length(radial);
                 glm::vec3 rdir = (len > 1e-5f) ? radial / len : localDir;
@@ -215,7 +216,7 @@ void TreeGenerator::processNode(
             buildRoots(static_cast<const RootsNode*>(node), *parentRings);
         break;
     case NodeType::LeafCluster:
-        buildLeafCluster(static_cast<const LeafClusterNode*>(node), origin, dir);
+        buildLeafCluster(static_cast<const LeafClusterNode*>(node), parentRings, origin, dir);
         break;
     }
 }
@@ -253,10 +254,14 @@ void TreeGenerator::buildBranches(
     std::uniform_real_distribution<float> jitterLen(0.85f, 1.15f);
 
     for (int i = 0; i < p.branchCount; ++i) {
-        // 从父节点rings按attachT取附着点、切线、right
+        // 从父节点rings按attachT取附着点，限制在[regionStart,regionEnd]区间内，
+        // 父级太底部/太顶部区域不长枝条
+        float rs = std::clamp(p.regionStart, 0.0f, 1.0f);
+        float re = std::clamp(p.regionEnd,   0.0f, 1.0f);
+        if (re < rs) std::swap(rs, re);
         float attachT = (p.branchCount > 1)
-            ? glm::mix(0.2f, 0.95f, (float)i / (float)(p.branchCount-1))
-            : 0.6f;
+            ? glm::mix(rs, re, (float)i / (float)(p.branchCount-1))
+            : glm::mix(rs, re, 0.5f);
 
         glm::vec3 attachPos, attachDir, attachRight;
         float     attachRadius = p.radiusScale;
@@ -300,7 +305,8 @@ void TreeGenerator::buildBranches(
 
         for (auto* child : graph.childrenOf(node->id)) {
             if (child->getType() == NodeType::LeafCluster)
-                processNode(graph, child, nullptr, tip, tipDir, thisLen, depth+1);
+                // 叶簇沿整根枝条均匀生长：把本枝 rings 传下去
+                processNode(graph, child, &rings, tip, tipDir, thisLen, depth+1);
             else
                 processNode(graph, child, &rings, attachPos, branchDir, thisLen, depth+1);
         }
@@ -318,7 +324,10 @@ void TreeGenerator::buildTwig(
     std::mt19937 rng(p.seed + depth * 77);
     std::uniform_real_distribution<float> jitter(-8.0f, 8.0f);
     std::uniform_real_distribution<float> jitterLen(0.8f, 1.2f);
-    std::uniform_real_distribution<float> attachDist(0.2f, 0.95f);
+    float rs = std::clamp(p.regionStart, 0.0f, 1.0f);
+    float re = std::clamp(p.regionEnd,   0.0f, 1.0f);
+    if (re < rs) std::swap(rs, re);
+    std::uniform_real_distribution<float> attachDist(rs, re);
 
     float baseAz = 0.0f;
     for (int i = 0; i < p.twigCount; ++i) {
@@ -366,7 +375,8 @@ void TreeGenerator::buildTwig(
 
         for (auto* child : graph.childrenOf(node->id)) {
             if (child->getType() == NodeType::LeafCluster)
-                processNode(graph, child, nullptr, tip, tipDir, thisLen, depth+1);
+                // 叶簇沿整根细枝均匀生长：把本枝 rings 传下去
+                processNode(graph, child, &rings, tip, tipDir, thisLen, depth+1);
             else
                 processNode(graph, child, &rings, attachPos, twigDir, thisLen, depth+1);
         }
@@ -427,41 +437,63 @@ void TreeGenerator::buildRoots(
 }
 
 // ---- LeafCluster ----
+// 叶片沿父级枝条(twig)整根均匀生长；每片叶以"垂直于枝条轴向"的随机外扩方向为
+// 生长方向(略带向枝梢前倾)，叶面法线再在垂直于生长方向的平面内随机旋转，
+// 避免所有叶片朝同一方向而显假。
 void TreeGenerator::buildLeafCluster(
-    const LeafClusterNode* node, glm::vec3 origin, glm::vec3 dir)
+    const LeafClusterNode* node,
+    const std::vector<BranchRing>* parentRings,
+    glm::vec3 origin, glm::vec3 dir)
 {
     const auto& p = node->params;
     std::mt19937 rng(p.seed);
     std::uniform_real_distribution<float> jitter(-p.normalJitter, p.normalJitter);
-    std::uniform_real_distribution<float> radJit(0.65f, 1.35f);
-    std::uniform_real_distribution<float> rotJit(0.0f, 360.0f);
+    std::uniform_real_distribution<float> radJit(0.7f, 1.3f);
+    std::uniform_real_distribution<float> rot01(0.0f, 1.0f);
 
     float goldenAngle = glm::radians(137.508f);
+    float pi2 = glm::two_pi<float>();
     auto& batch = getBatch(p.material, true);
     glm::vec3 col = p.material.albedo;
 
+    bool haveRings = (parentRings && !parentRings->empty());
+
     for (int i = 0; i < p.leafCount; ++i) {
-        float phi   = std::acos(1.0f - (float)(i+0.5f) / (float)p.leafCount);
-        float theta = goldenAngle * (float)i;
-        glm::vec3 n = glm::normalize(glm::vec3(
-            std::sin(phi)*std::cos(theta) + jitter(rng),
-            std::abs(std::cos(phi)) + jitter(rng) * 0.5f,
-            std::sin(phi)*std::sin(theta) + jitter(rng)
-        ));
-        glm::vec3 pos = origin + n * (p.clusterRadius * radJit(rng));
+        // 附着点：沿整根枝条均匀分布(带轻微抖动)，而非全挤在末端
+        glm::vec3 axisPos, axisDir, axisRight;
+        float     axisRadius = 0.0f;
+        if (haveRings) {
+            float t = (p.leafCount > 1) ? (float)i / (float)(p.leafCount - 1) : 0.5f;
+            t = glm::clamp(t + (rot01(rng) - 0.5f) / (float)p.leafCount, 0.0f, 1.0f);
+            sampleRings(*parentRings, t, axisPos, axisDir, axisRight, axisRadius);
+        } else {
+            axisPos = origin;
+            axisDir = glm::normalize(dir);
+            axisRight = perpendicular(axisDir);
+        }
+        axisDir = glm::normalize(axisDir);
 
-        glm::vec3 leafUp    = glm::normalize(glm::mix(n, glm::vec3(0,1,0), 0.5f));
-        glm::vec3 leafRight = glm::normalize(glm::cross(leafUp, glm::vec3(0,0,1)));
-        if (glm::length(leafRight) < 0.01f)
-            leafRight = glm::normalize(glm::cross(leafUp, glm::vec3(1,0,0)));
-        glm::vec3 leafFwd = glm::normalize(glm::cross(leafRight, leafUp));
+        // 绕枝条轴的随机方位(黄金角+抖动)，构造垂直于枝条方向的外扩方向
+        float az = goldenAngle * (float)i + (rot01(rng) - 0.5f) * 0.7f;
+        glm::vec3 fwd    = glm::normalize(glm::cross(axisDir, axisRight));
+        glm::vec3 outDir = glm::normalize(axisRight * std::cos(az) + fwd * std::sin(az));
 
-        float rot = glm::radians(rotJit(rng));
-        leafRight = leafRight*std::cos(rot) + leafFwd*std::sin(rot);
-        leafFwd   = glm::normalize(glm::cross(leafRight, leafUp));
+        // 叶片生长方向：以垂直外扩为主，略向枝梢方向前倾 + 抖动
+        glm::vec3 leafUp = glm::normalize(outDir + axisDir * (0.25f + jitter(rng)));
 
+        // 叶基贴在枝条表面，叶片向外伸展
+        glm::vec3 basePos = axisPos + outDir * axisRadius;
         float hs = p.leafSize * 0.5f;
         float hw = hs * 0.65f;
+        glm::vec3 pos = basePos + leafUp * ((hs + p.clusterRadius * 0.4f) * radJit(rng));
+
+        // 叶面朝向：在垂直于 leafUp 的平面内随机选一个法线朝向
+        glm::vec3 tmp = (std::abs(leafUp.y) < 0.95f) ? glm::vec3(0,1,0) : glm::vec3(1,0,0);
+        glm::vec3 leafRight = glm::normalize(glm::cross(leafUp, tmp));
+        glm::vec3 leafFwd   = glm::normalize(glm::cross(leafRight, leafUp));
+        float rot = rot01(rng) * pi2;
+        leafRight = glm::normalize(leafRight * std::cos(rot) + leafFwd * std::sin(rot));
+        leafFwd   = glm::normalize(glm::cross(leafRight, leafUp));
 
         // 4顶点，带UV: 左下(0,0) 右下(1,0) 右上(1,1) 左上(0,1)
         struct LV { glm::vec3 pos; float u, v; };

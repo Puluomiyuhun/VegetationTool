@@ -10,6 +10,9 @@ public:
     void shutdown();
     void render(NodeGraph& graph, NodeId& selectedNodeId);
 
+    // 读取工程后调用：强制下一帧按各节点 editorPos 重新摆放
+    void requestReposition() { m_firstFrame = true; }
+
 private:
     ned::EditorContext* m_ctx = nullptr;
 

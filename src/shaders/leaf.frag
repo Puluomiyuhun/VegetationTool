@@ -9,13 +9,16 @@ in vec3 vAlbedo;
 uniform float uRoughness;
 uniform float uAoStrength;
 uniform float uSssStrength;
+uniform float uAlphaCutoff;
 
 uniform sampler2D uTexBaseColor;
 uniform sampler2D uTexRoughness;
 uniform sampler2D uTexNormal;
+uniform sampler2D uTexOpacity;
 uniform int uHasBaseColor;
 uniform int uHasRoughness;
 uniform int uHasNormal;
+uniform int uHasOpacity;
 
 uniform vec3  uLightDir;
 uniform vec3  uLightColor;
@@ -28,6 +31,14 @@ const float PI = 3.14159265;
 
 void main()
 {
+    // 不透明度遮罩：优先用独立 opacity 贴图(R通道)，否则用 baseColor 的 alpha 通道
+    float opacity = 1.0;
+    if (uHasOpacity != 0)
+        opacity = texture(uTexOpacity, vUV).r;
+    else if (uHasBaseColor != 0)
+        opacity = texture(uTexBaseColor, vUV).a;
+    if (opacity < uAlphaCutoff) discard;
+
     vec3  N   = normalize(vNormal);
     vec3  V   = normalize(vViewPos - vFragPos);
     // 叶片双面

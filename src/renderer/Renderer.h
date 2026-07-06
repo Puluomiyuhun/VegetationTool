@@ -49,6 +49,7 @@ private:
         Texture        texBaseColor;   // unit 0 — basecolor/albedo
         Texture        texRoughness;   // unit 1 — roughness(R) metallic(G)
         Texture        texNormal;      // unit 2 — tangent-space normal
+        Texture        texOpacity;     // unit 3 — opacity mask(R)（叶片alpha剔除）
     };
 
     std::vector<GpuBatch> m_batches;
