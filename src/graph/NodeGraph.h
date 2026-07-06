@@ -42,6 +42,10 @@ public:
     virtual const char* getLabel() const = 0;
     // 绘制属性面板，返回true表示参数被修改
     virtual bool drawProperties() = 0;
+    // 深拷贝自身（含参数），用于复制/粘贴的剪贴板暂存
+    virtual std::unique_ptr<TreeNode> clone() const = 0;
+    // 若 other 与自身同类型，则拷贝其参数（粘贴时把剪贴板参数灌入新节点）
+    virtual void copyParamsFrom(const TreeNode* other) = 0;
 };
 
 class NodeGraph {

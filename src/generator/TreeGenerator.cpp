@@ -179,9 +179,20 @@ void TreeGenerator::appendCollar(MeshBatch& batch,
 TreeMeshData TreeGenerator::generate(NodeGraph& graph) {
     TreeMeshData data;
     m_out = &data;
-    TreeNode* root = graph.rootNode();
-    if (!root) return data;
-    processNode(graph, root, nullptr, {0,0,0}, {0,1,0}, 1.0f, 0);
+    // 一个工程内可有多棵植被：每个"无输入连线的 Trunk"都是一株独立植物，
+    // 各自按自身 posX/posZ 摆放到场景中。
+    for (const auto& [id, node] : graph.nodes()) {
+        if (node->getType() != NodeType::Trunk) continue;
+        // 只处理根 Trunk（输入未连接的），作为独立植株标志
+        bool hasInput = false;
+        for (const auto& pin : node->inputPins)
+            if (graph.linkFromPin(pin.id) != INVALID_LINK) { hasInput = true; break; }
+        if (hasInput) continue;
+
+        const auto& tp = static_cast<const TrunkNode*>(node.get())->params;
+        glm::vec3 base = {tp.posX, 0.0f, tp.posZ};
+        processNode(graph, node.get(), nullptr, base, {0,1,0}, 1.0f, 0);
+    }
     m_out = nullptr;
     return data;
 }

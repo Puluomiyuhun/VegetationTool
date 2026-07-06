@@ -36,6 +36,10 @@ struct LightingParams {
     glm::vec3 skyTop      = {0.35f, 0.52f, 0.78f};  // 天顶蓝
     glm::vec3 skyHorizon  = {0.78f, 0.76f, 0.70f};  // 地平线暖雾
     glm::vec3 skyGround   = {0.52f, 0.50f, 0.47f};  // 地面灰
+    // 阴影(shadow map 自阴影)
+    bool  shadowEnabled  = true;
+    float shadowStrength = 0.6f;    // 阴影浓度(0=无, 1=全黑)
+    float shadowBias     = 0.0025f; // 深度偏移，抑制阴影痤疮(shadow acne)
 };
 
 class Renderer {
@@ -65,8 +69,22 @@ private:
     Shader m_leafShader;
     Shader m_gridShader;
     Shader m_skyShader;
+    Shader m_depthShader;   // 阴影深度 pass
     Mesh   m_gridMesh;
     GLuint m_skyVao = 0;   // 空 VAO，用于全屏三角形(顶点由 gl_VertexID 生成)
+
+    // ---- 阴影贴图 ----
+    GLuint    m_shadowFbo = 0;
+    GLuint    m_shadowTex = 0;
+    int       m_shadowSize = 2048;
+    glm::mat4 m_lightSpace = glm::mat4(1.0f);
+    // 场景包围盒(世界空间)，用于拟合光源正交视锥
+    glm::vec3 m_sceneMin = glm::vec3(-5.0f);
+    glm::vec3 m_sceneMax = glm::vec3( 5.0f);
+
+    void initShadowMap();
+    void computeSceneBounds(const TreeMeshData& data);
+    void renderShadowPass();
 
     void setLightUniforms(Shader& sh);
     void bindBatchTextures(Shader& sh, GpuBatch& gb);

@@ -195,6 +195,9 @@ void UIManager::render(NodeGraph& graph, NodeId& selectedNodeId,
 
     // Menu bar
     if (ImGui::BeginMainMenuBar()) {
+        // 左上角软件标题（玩梗：与 SpeedTree 相反）
+        ImGui::TextColored(ImVec4(0.55f, 0.82f, 0.35f, 1.0f), "SlowTree");
+        ImGui::Separator();
         if (ImGui::BeginMenu("File")) {
             if (ImGui::MenuItem("New Tree"))
                 graph.buildDefaultTemplate();
@@ -254,6 +257,10 @@ void UIManager::render(NodeGraph& graph, NodeId& selectedNodeId,
         ImGui::ColorEdit3("Sky Top",     &L.skyTop.x);
         ImGui::ColorEdit3("Sky Horizon", &L.skyHorizon.x);
         ImGui::ColorEdit3("Sky Ground",  &L.skyGround.x);
+        ImGui::SeparatorText("Shadow");
+        ImGui::Checkbox("Enable Shadow", &L.shadowEnabled);
+        ImGui::SliderFloat("Shadow Strength", &L.shadowStrength, 0.0f, 1.0f);
+        ImGui::SliderFloat("Shadow Bias",     &L.shadowBias,     0.0f, 0.01f, "%.4f");
     }
     ImGui::End();
 

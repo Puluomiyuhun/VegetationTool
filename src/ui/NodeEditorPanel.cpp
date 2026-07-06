@@ -1,6 +1,9 @@
 #include "NodeEditorPanel.h"
+#include "graph/Nodes.h"
 #include <imgui.h>
 #include <imgui_node_editor.h>
+#include <unordered_map>
+#include <algorithm>
 
 namespace ned = ax::NodeEditor;
 
@@ -115,10 +118,35 @@ void NodeEditorPanel::render(NodeGraph& graph, NodeId& selectedNodeId) {
     int count = ned::GetSelectedNodes(sel.data(), (int)sel.size());
     selectedNodeId = (count > 0) ? (NodeId)sel[0].Get() : INVALID_NODE;
 
+    // 上一帧粘贴出的新节点：本帧摆位并选中。
+    // 必须在“同步 editorPos”循环之前处理：新节点首帧尚未被编辑器定位(默认0,0)，
+    // 若先跑同步循环会把粘贴时算好的 editorPos 覆盖成 0,0，导致所有节点叠在一起。
+    if (!m_pastePendingSelect.empty()) {
+        ned::ClearSelection();
+        for (NodeId nid : m_pastePendingSelect) {
+            if (auto* n = graph.getNode(nid))
+                ned::SetNodePosition((ned::NodeId)nid, ImVec2(n->editorPos.x, n->editorPos.y));
+            ned::SelectNode((ned::NodeId)nid, true);
+        }
+        m_pastePendingSelect.clear();
+    }
+
     // 每帧同步节点位置到 editorPos（支持拖动后持久化）
     for (auto& [id, node] : graph.nodes()) {
         ImVec2 pos = ned::GetNodePosition((ned::NodeId)id);
         node->editorPos = {pos.x, pos.y};
+    }
+
+    // 复制/粘贴快捷键（Ctrl+C / Ctrl+V）。仅在编辑器获得焦点时响应。
+    if (ned::GetSelectedObjectCount() >= 0) {
+        ImGuiIO& io = ImGui::GetIO();
+        bool ctrl = io.KeyCtrl;
+        if (ctrl && ImGui::IsKeyPressed(ImGuiKey_C, false))
+            copySelected(graph);
+        if (ctrl && ImGui::IsKeyPressed(ImGuiKey_V, false)) {
+            auto ids = pasteClipboard(graph, {40.0f, 40.0f});
+            m_pastePendingSelect = ids;
+        }
     }
 
     // 右键菜单
@@ -126,6 +154,68 @@ void NodeEditorPanel::render(NodeGraph& graph, NodeId& selectedNodeId) {
 
     ned::End();
     ned::SetCurrentEditor(nullptr);
+}
+
+// 复制当前选中的节点到剪贴板：克隆参数并记录它们之间的内部连线（相对索引）
+void NodeEditorPanel::copySelected(NodeGraph& graph) {
+    std::vector<ned::NodeId> sel(ned::GetSelectedObjectCount());
+    int count = ned::GetSelectedNodes(sel.data(), (int)sel.size());
+    if (count <= 0) return;
+
+    m_clipboard.clear();
+    m_clipboardEdges.clear();
+
+    // 原节点 id -> 剪贴板索引
+    std::unordered_map<NodeId, int> idToIdx;
+    for (int i = 0; i < count; ++i) {
+        NodeId nid = (NodeId)sel[i].Get();
+        auto* node = graph.getNode(nid);
+        if (!node) continue;
+        idToIdx[nid] = (int)m_clipboard.size();
+        m_clipboard.push_back(node->clone());
+    }
+
+    // 记录选区内部的连线（父输出 -> 子输入 两端都在选区中）
+    for (const auto& link : graph.links()) {
+        // 找 fromPin/toPin 所属节点
+        NodeId fromNode = INVALID_NODE, toNode = INVALID_NODE;
+        for (const auto& [id, node] : graph.nodes()) {
+            if (node->outputPin.id == link.fromPin) fromNode = id;
+            for (const auto& p : node->inputPins)
+                if (p.id == link.toPin) toNode = id;
+        }
+        auto fIt = idToIdx.find(fromNode);
+        auto tIt = idToIdx.find(toNode);
+        if (fIt != idToIdx.end() && tIt != idToIdx.end())
+            m_clipboardEdges.push_back({fIt->second, tIt->second});
+    }
+}
+
+// 把剪贴板内容粘贴到画布：新建同类型节点、灌入参数、按 offset 平移、重建内部连线
+std::vector<NodeId> NodeEditorPanel::pasteClipboard(NodeGraph& graph, glm::vec2 offset) {
+    std::vector<NodeId> newIds;
+    if (m_clipboard.empty()) return newIds;
+
+    // 剪贴板索引 -> 新建节点 id
+    std::vector<NodeId> idxToNew(m_clipboard.size(), INVALID_NODE);
+    for (size_t i = 0; i < m_clipboard.size(); ++i) {
+        const TreeNode* src = m_clipboard[i].get();
+        glm::vec2 pos = src->editorPos + offset;
+        NodeId nid = graph.addNode(src->getType(), pos);
+        auto* dst = graph.getNode(nid);
+        if (dst) dst->copyParamsFrom(src);
+        idxToNew[i] = nid;
+        newIds.push_back(nid);
+    }
+
+    // 重建内部连线
+    for (const auto& e : m_clipboardEdges) {
+        auto* parent = graph.getNode(idxToNew[e.first]);
+        auto* child  = graph.getNode(idxToNew[e.second]);
+        if (parent && child && !child->inputPins.empty())
+            graph.addLink(parent->outputPin.id, child->inputPins[0].id);
+    }
+    return newIds;
 }
 
 void NodeEditorPanel::handleContextMenu(NodeGraph& graph) {
@@ -144,6 +234,18 @@ void NodeEditorPanel::handleContextMenu(NodeGraph& graph) {
             graph.addNode(NodeType::Twig, canvasPos);
         if (ImGui::MenuItem("Add Leaf Cluster"))
             graph.addNode(NodeType::LeafCluster, canvasPos);
+
+        ImGui::Separator();
+        bool hasSel = ned::GetSelectedObjectCount() > 0;
+        if (ImGui::MenuItem("Copy", "Ctrl+C", false, hasSel))
+            copySelected(graph);
+        if (ImGui::MenuItem("Paste", "Ctrl+V", false, !m_clipboard.empty())) {
+            // 粘贴到鼠标位置：以剪贴板首节点为基准对齐到光标
+            glm::vec2 off = m_clipboard.empty()
+                ? glm::vec2(40.0f, 40.0f)
+                : canvasPos - m_clipboard.front()->editorPos;
+            m_pastePendingSelect = pasteClipboard(graph, off);
+        }
 
         ImGui::Separator();
         if (ImGui::MenuItem("Reset to Default"))

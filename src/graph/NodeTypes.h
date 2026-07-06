@@ -26,6 +26,8 @@ struct TrunkParams {
     float startRadius = 0.35f;
     float endRadius   = 0.12f;
     float baseFlare   = 1.4f;
+    float posX        = 0.0f;   // 植株在场景中的位置X(用于一个工程内摆放多棵植被)
+    float posZ        = 0.0f;   // 植株在场景中的位置Z
     float noiseAmount = 25.0f;  // 样条噪声扰动强度(度): 让枝干自然扭曲而非笔直
     float noiseFreq   = 2.5f;   // 噪声频率: 越大扭动越频繁
     float gnarl       = 15.0f;  // 螺旋扭曲总角度(度): 树皮沿长度旋拧的苍劲感

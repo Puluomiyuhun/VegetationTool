@@ -34,6 +34,8 @@ void writeNode(std::ostream& o, const TreeNode* n) {
         o << "startRadius " << p.startRadius << '\n';
         o << "endRadius "   << p.endRadius   << '\n';
         o << "baseFlare "   << p.baseFlare   << '\n';
+        o << "posX "        << p.posX        << '\n';
+        o << "posZ "        << p.posZ        << '\n';
         o << "noiseAmount " << p.noiseAmount << '\n';
         o << "noiseFreq "   << p.noiseFreq   << '\n';
         o << "gnarl "       << p.gnarl       << '\n';
@@ -168,6 +170,7 @@ void applyParams(TreeNode* n, const KV& kv) {
         auto& p = static_cast<TrunkNode*>(n)->params;
         p.length=getF(kv,"length",p.length); p.startRadius=getF(kv,"startRadius",p.startRadius);
         p.endRadius=getF(kv,"endRadius",p.endRadius); p.baseFlare=getF(kv,"baseFlare",p.baseFlare);
+        p.posX=getF(kv,"posX",p.posX); p.posZ=getF(kv,"posZ",p.posZ);
         p.noiseAmount=getF(kv,"noiseAmount",p.noiseAmount); p.noiseFreq=getF(kv,"noiseFreq",p.noiseFreq);
         p.gnarl=getF(kv,"gnarl",p.gnarl); p.taperPow=getF(kv,"taperPow",p.taperPow);
         p.sides=getI(kv,"sides",p.sides); p.lengthSegs=getI(kv,"lengthSegs",p.lengthSegs);

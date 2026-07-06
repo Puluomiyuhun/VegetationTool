@@ -28,9 +28,38 @@ uniform float uLightIntensity;
 uniform float uAmbientStrength;
 uniform float uExposure;
 
+// 阴影
+uniform mat4      uLightSpace;
+uniform sampler2D uShadowMap;
+uniform int   uShadowEnabled;
+uniform float uShadowStrength;
+uniform float uShadowBias;
+
 out vec4 FragColor;
 
 const float PI = 3.14159265;
+
+// PCF 3x3 采样阴影贴图，返回可见度[0,1]，0=全阴影
+float shadowVisibility(vec3 fragPos, float NdotL) {
+    if (uShadowEnabled == 0) return 1.0;
+    vec4 lsPos = uLightSpace * vec4(fragPos, 1.0);
+    vec3 proj  = lsPos.xyz / lsPos.w;
+    proj = proj * 0.5 + 0.5;
+    if (proj.z > 1.0) return 1.0;                     // 超出远平面视为受光
+    if (proj.x < 0.0 || proj.x > 1.0 ||
+        proj.y < 0.0 || proj.y > 1.0) return 1.0;     // 视锥外视为受光
+    // 斜率相关偏移，抑制 shadow acne
+    float bias = max(uShadowBias * (1.0 - NdotL), uShadowBias * 0.2);
+    float shadow = 0.0;
+    vec2 texel = 1.0 / vec2(textureSize(uShadowMap, 0));
+    for (int x = -1; x <= 1; ++x)
+        for (int y = -1; y <= 1; ++y) {
+            float d = texture(uShadowMap, proj.xy + vec2(x, y) * texel).r;
+            shadow += (proj.z - bias > d) ? 1.0 : 0.0;
+        }
+    shadow /= 9.0;
+    return 1.0 - shadow * uShadowStrength;
+}
 
 float D_GGX(float NdotH, float roughness) {
     float a  = roughness * roughness;
@@ -98,7 +127,9 @@ void main()
     vec3 diffuse  = kD * albedo / PI;
 
     vec3 Lo    = (diffuse + specular) * uLightColor * uLightIntensity * NdotL;
-    vec3 color = ambient + Lo;
+    // 阴影只作用于直接光(Lo)，环境光不衰减，避免暗部死黑
+    float vis  = shadowVisibility(vFragPos, NdotL);
+    vec3 color = ambient + Lo * vis;
 
     // 曝光 + Reinhard tonemapping + gamma
     color *= uExposure;

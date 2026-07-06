@@ -90,6 +90,11 @@ bool TrunkNode::drawProperties() {
         changed |= ImGui::SliderFloat("UV Tiling",    &params.uvTiling,    0.1f, 20.0f);
         changed |= ImGui::SliderInt  ("Seed",         &params.seed,        0, 999);
     }
+    if (ImGui::CollapsingHeader("Placement", ImGuiTreeNodeFlags_DefaultOpen)) {
+        // 植株在场景中的位置(一个工程内可摆放多棵独立植被)
+        changed |= ImGui::SliderFloat("Pos X", &params.posX, -50.0f, 50.0f);
+        changed |= ImGui::SliderFloat("Pos Z", &params.posZ, -50.0f, 50.0f);
+    }
     if (ImGui::CollapsingHeader("Material", ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui::PushID("mat_trunk");
         changed |= drawMaterial(params.material, false);

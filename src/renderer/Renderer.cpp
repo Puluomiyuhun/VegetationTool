@@ -2,16 +2,43 @@
 #include <glad/glad.h>
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <cmath>
 
 void Renderer::init() {
     m_branchShader.loadFromFiles("shaders/branch.vert", "shaders/branch.frag");
     m_leafShader.loadFromFiles("shaders/leaf.vert",     "shaders/leaf.frag");
     m_gridShader.loadFromFiles("shaders/grid.vert",     "shaders/grid.frag");
     m_skyShader.loadFromFiles("shaders/sky.vert",       "shaders/sky.frag");
+    m_depthShader.loadFromFiles("shaders/depth.vert",   "shaders/depth.frag");
     glGenVertexArrays(1, &m_skyVao);
+    initShadowMap();
     buildGrid();
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_CULL_FACE);
+}
+
+// 创建深度贴图 FBO：仅深度附件，供光源视角写入
+void Renderer::initShadowMap() {
+    glGenFramebuffers(1, &m_shadowFbo);
+    glGenTextures(1, &m_shadowTex);
+    glBindTexture(GL_TEXTURE_2D, m_shadowTex);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24,
+                 m_shadowSize, m_shadowSize, 0,
+                 GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+    // 边界外视为“全亮”(深度=1)，避免视锥外区域误判为阴影
+    float border[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+    glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, border);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, m_shadowFbo);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
+                           GL_TEXTURE_2D, m_shadowTex, 0);
+    glDrawBuffer(GL_NONE);
+    glReadBuffer(GL_NONE);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
 void Renderer::shutdown() {
@@ -19,7 +46,10 @@ void Renderer::shutdown() {
     m_leafShader.destroy();
     m_gridShader.destroy();
     m_skyShader.destroy();
+    m_depthShader.destroy();
     if (m_skyVao) { glDeleteVertexArrays(1, &m_skyVao); m_skyVao = 0; }
+    if (m_shadowFbo) { glDeleteFramebuffers(1, &m_shadowFbo); m_shadowFbo = 0; }
+    if (m_shadowTex) { glDeleteTextures(1, &m_shadowTex); m_shadowTex = 0; }
     for (auto& b : m_batches) {
         b.mesh.destroy();
         b.texBaseColor.destroy();
@@ -65,6 +95,28 @@ void Renderer::uploadTreeMesh(const TreeMeshData& data) {
 
         m_batches.push_back(std::move(gb));
     }
+
+    computeSceneBounds(data);
+}
+
+// 计算所有批次顶点的世界空间 AABB，用于把光源正交视锥拟合到场景
+void Renderer::computeSceneBounds(const TreeMeshData& data) {
+    bool any = false;
+    glm::vec3 mn( 1e9f), mx(-1e9f);
+    for (const auto& batch : data.batches) {
+        int stride = batch.isLeaf ? 11 : 8;  // 每顶点 float 数
+        for (size_t i = 0; i + 2 < batch.vertices.size(); i += stride) {
+            glm::vec3 p(batch.vertices[i], batch.vertices[i+1], batch.vertices[i+2]);
+            mn = glm::min(mn, p);
+            mx = glm::max(mx, p);
+            any = true;
+        }
+    }
+    if (!any) { mn = glm::vec3(-5.0f); mx = glm::vec3(5.0f); }
+    // 略微外扩，保证边缘阴影不被视锥裁掉
+    glm::vec3 pad = (mx - mn) * 0.05f + glm::vec3(0.5f);
+    m_sceneMin = mn - pad;
+    m_sceneMax = mx + pad;
 }
 
 void Renderer::setLightUniforms(Shader& sh) {
@@ -76,6 +128,57 @@ void Renderer::setLightUniforms(Shader& sh) {
     sh.setFloat("uLightIntensity",  l.lightIntensity);
     sh.setFloat("uAmbientStrength", l.ambientStrength);
     sh.setFloat("uExposure",        l.exposure);
+    // 阴影相关
+    sh.setMat4("uLightSpace", glm::value_ptr(m_lightSpace));
+    sh.setInt("uShadowMap", 4);
+    sh.setInt("uShadowEnabled", l.shadowEnabled ? 1 : 0);
+    sh.setFloat("uShadowStrength", l.shadowStrength);
+    sh.setFloat("uShadowBias", l.shadowBias);
+    glActiveTexture(GL_TEXTURE4);
+    glBindTexture(GL_TEXTURE_2D, m_shadowTex);
+    glActiveTexture(GL_TEXTURE0);
+}
+
+// 光源视角把整棵树写入深度贴图。正交视锥拟合场景 AABB。
+void Renderer::renderShadowPass() {
+    // 以场景包围球心为目标，沿光照方向反向放置光源
+    glm::vec3 center = (m_sceneMin + m_sceneMax) * 0.5f;
+    float radius = glm::length(m_sceneMax - m_sceneMin) * 0.5f + 0.001f;
+    glm::vec3 dir = glm::normalize(lighting.lightDir);   // 指向光源方向
+    glm::vec3 eye = center + dir * (radius * 2.0f);
+    glm::vec3 up  = (std::abs(dir.y) > 0.99f) ? glm::vec3(0,0,1) : glm::vec3(0,1,0);
+    glm::mat4 lightView = glm::lookAt(eye, center, up);
+    glm::mat4 lightProj = glm::ortho(-radius, radius, -radius, radius,
+                                     0.01f, radius * 4.0f);
+    m_lightSpace = lightProj * lightView;
+
+    glViewport(0, 0, m_shadowSize, m_shadowSize);
+    glBindFramebuffer(GL_FRAMEBUFFER, m_shadowFbo);
+    glClear(GL_DEPTH_BUFFER_BIT);
+
+    // 正面剔除减少 peter-panning；但叶片双面故对叶片关闭
+    glm::mat4 model = glm::mat4(1.0f);
+    m_depthShader.use();
+    m_depthShader.setMat4("uLightSpace", glm::value_ptr(m_lightSpace));
+    m_depthShader.setMat4("uModel", glm::value_ptr(model));
+    m_depthShader.setInt("uTexOpacity", 3);
+    m_depthShader.setInt("uTexBaseColor", 0);
+
+    for (auto& gb : m_batches) {
+        if (!gb.mesh.valid()) continue;
+        m_depthShader.setInt("uIsLeaf", gb.isLeaf ? 1 : 0);
+        m_depthShader.setFloat("uAlphaCutoff", gb.material.alphaCutoff);
+        m_depthShader.setInt("uHasOpacity", gb.texOpacity.valid() ? 1 : 0);
+        m_depthShader.setInt("uHasBaseColor", gb.texBaseColor.valid() ? 1 : 0);
+        if (gb.texOpacity.valid())   gb.texOpacity.bind(3);
+        if (gb.texBaseColor.valid()) gb.texBaseColor.bind(0);
+        if (gb.isLeaf) glDisable(GL_CULL_FACE);
+        else           glCullFace(GL_FRONT);
+        gb.mesh.draw();
+        if (gb.isLeaf) glEnable(GL_CULL_FACE);
+        else           glCullFace(GL_BACK);
+    }
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
 void Renderer::bindBatchTextures(Shader& sh, GpuBatch& gb) {
@@ -97,6 +200,21 @@ void Renderer::bindBatchTextures(Shader& sh, GpuBatch& gb) {
 }
 
 void Renderer::render(const OrbitCamera& camera, float aspect, bool wireframe) {
+    // 记录当前绑定的 FBO 与 viewport（ViewportPanel 已绑定离屏 FBO），
+    // 阴影 pass 会切换 FBO/viewport，结束后需恢复。
+    GLint prevFbo = 0;
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &prevFbo);
+    GLint prevVp[4];
+    glGetIntegerv(GL_VIEWPORT, prevVp);
+
+    // 1) 阴影深度 pass（从光源视角渲染到深度贴图）
+    if (lighting.shadowEnabled && !m_batches.empty()) {
+        renderShadowPass();
+        glBindFramebuffer(GL_FRAMEBUFFER, prevFbo);
+        glViewport(prevVp[0], prevVp[1], prevVp[2], prevVp[3]);
+    }
+
+    // 2) 主 pass
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     // 先画渐变天空背景(覆盖整个视口，替代纯色 clear)

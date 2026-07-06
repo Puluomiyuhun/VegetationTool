@@ -3,6 +3,51 @@
 #include <GLFW/glfw3.h>
 #include <stdexcept>
 #include <cstdio>
+#include <vector>
+#include <cmath>
+
+// 程序化生成一个风格化的树形图标（绿色圆冠 + 棕色树干），设置为窗口图标。
+// 无需外部资源文件，避免打包依赖。
+static void setWindowIcon(GLFWwindow* win) {
+    auto makeImage = [](int S, std::vector<unsigned char>& px) {
+        px.assign(S * S * 4, 0);
+        float cx = S * 0.5f;
+        float canopyCy = S * 0.40f;
+        float canopyR  = S * 0.34f;
+        // 树干矩形
+        float trunkW = S * 0.14f;
+        float trunkTop = S * 0.55f, trunkBot = S * 0.92f;
+        for (int y = 0; y < S; ++y) {
+            for (int x = 0; x < S; ++x) {
+                float fx = x + 0.5f, fy = y + 0.5f;
+                unsigned char r=0,g=0,b=0,a=0;
+                // 圆冠（带上深下浅的渐变）
+                float d = std::sqrt((fx-cx)*(fx-cx) + (fy-canopyCy)*(fy-canopyCy));
+                if (d <= canopyR) {
+                    float t = fy / (float)S;             // 越往下越亮
+                    r = (unsigned char)(40  + t*35);
+                    g = (unsigned char)(120 + t*70);
+                    b = (unsigned char)(40  + t*25);
+                    a = 255;
+                }
+                // 树干（覆盖在圆冠之上）
+                if (fx >= cx-trunkW*0.5f && fx <= cx+trunkW*0.5f &&
+                    fy >= trunkTop && fy <= trunkBot) {
+                    r = 96; g = 60; b = 30; a = 255;
+                }
+                int i = (y*S + x)*4;
+                px[i]=r; px[i+1]=g; px[i+2]=b; px[i+3]=a;
+            }
+        }
+    };
+    std::vector<unsigned char> px32, px16;
+    makeImage(32, px32);
+    makeImage(16, px16);
+    GLFWimage imgs[2];
+    imgs[0].width = 32; imgs[0].height = 32; imgs[0].pixels = px32.data();
+    imgs[1].width = 16; imgs[1].height = 16; imgs[1].pixels = px16.data();
+    glfwSetWindowIcon(win, 2, imgs);
+}
 
 bool Application::init(int width, int height) {
     if (!glfwInit()) {
@@ -15,7 +60,7 @@ bool Application::init(int width, int height) {
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
     glfwWindowHint(GLFW_SAMPLES, 4);
 
-    m_window = glfwCreateWindow(width, height, "VegetationTool", nullptr, nullptr);
+    m_window = glfwCreateWindow(width, height, "SlowTree", nullptr, nullptr);
     if (!m_window) {
         fprintf(stderr, "Window creation failed\n");
         glfwTerminate();
@@ -24,6 +69,7 @@ bool Application::init(int width, int height) {
 
     glfwMakeContextCurrent(m_window);
     glfwSwapInterval(1);
+    setWindowIcon(m_window);
     glfwSetWindowUserPointer(m_window, this);
     glfwSetFramebufferSizeCallback(m_window, framebufferResizeCb);
 
