@@ -48,5 +48,6 @@ private:
     static glm::vec3 perpendicular(glm::vec3 dir);
 
     void appendCylinder(MeshBatch& batch,
-                        const std::vector<BranchRing>& rings, int sides);
+                        const std::vector<BranchRing>& rings, int sides,
+                        float uvTiling = 1.0f);
 };

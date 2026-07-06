@@ -31,6 +31,7 @@ struct TrunkParams {
     int   sides       = 8;
     int   lengthSegs  = 8;
     int   seed        = 1;
+    float uvTiling    = 3.0f;   // 树皮纹理沿枝干长度的平铺次数
     MaterialParams material = {{0.38f,0.22f,0.10f}, 0.85f, 0.0f, 0.5f, 0.0f};
 };
 
@@ -48,6 +49,7 @@ struct BranchParams {
     int   sides        = 6;
     int   lengthSegs   = 4;
     int   seed         = 2;
+    float uvTiling     = 2.0f;   // 树皮纹理沿枝条长度的平铺次数
     MaterialParams material = {{0.32f,0.18f,0.08f}, 0.88f, 0.0f, 0.55f, 0.0f};
 };
 
@@ -66,6 +68,7 @@ struct TwigParams {
     int   lengthSegs   = 3;
     bool  alternating  = true;
     int   seed         = 3;
+    float uvTiling     = 1.0f;   // 树皮纹理沿细枝长度的平铺次数
     MaterialParams material = {{0.28f,0.16f,0.07f}, 0.9f, 0.0f, 0.6f, 0.0f};
 };
 

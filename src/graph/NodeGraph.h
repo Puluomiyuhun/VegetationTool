@@ -76,9 +76,11 @@ public:
 private:
     std::unordered_map<NodeId, std::unique_ptr<TreeNode>> m_nodes;
     std::vector<Link> m_links;
+    // imgui-node-editor 中 Node/Pin/Link 共用同一 ID 空间，
+    // 三者必须互不重叠，否则会触发 ID 冲突且节点无法拖动。
     NodeId   m_nextNodeId = 1;
-    PinId    m_nextPinId  = 1;
-    LinkId   m_nextLinkId = 1;
+    PinId    m_nextPinId  = 10000;
+    LinkId   m_nextLinkId = 100000;
     bool     m_dirty      = true;
 
     // Pin -> owner node，用于反查

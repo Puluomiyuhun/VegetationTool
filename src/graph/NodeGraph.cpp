@@ -149,8 +149,8 @@ void NodeGraph::buildDefaultTemplate() {    m_nodes.clear();
     m_pinOwner.clear();
     m_pinToLink.clear();
     m_nextNodeId = 1;
-    m_nextPinId  = 1;
-    m_nextLinkId = 1;
+    m_nextPinId  = 10000;
+    m_nextLinkId = 100000;
 
     NodeId trunk  = addNode(NodeType::Trunk,       {100.0f, 200.0f});
     NodeId branch = addNode(NodeType::Branch,      {320.0f, 200.0f});

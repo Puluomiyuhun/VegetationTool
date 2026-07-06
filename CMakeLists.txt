@@ -44,7 +44,7 @@ target_link_libraries(${PROJECT_NAME}
         imgui_node_editor
 )
 if(WIN32)
-    target_link_libraries(${PROJECT_NAME} PRIVATE opengl32)
+    target_link_libraries(${PROJECT_NAME} PRIVATE opengl32 comdlg32)
 endif()
 
 # 编译选项

@@ -8,7 +8,12 @@
     "stb",
     {
       "name": "imgui",
-      "features": ["glfw-binding", "opengl3-binding", "docking-experimental"]
+      "features": [
+        "glfw-binding",
+        "opengl3-binding",
+        "docking-experimental"
+      ]
     }
-  ]
+  ],
+  "builtin-baseline": "dfcb04008a5a9e038a4ae0d1af57909e30d21359"
 }

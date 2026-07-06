@@ -1,5 +1,27 @@
 #include "Nodes.h"
 #include <imgui.h>
+#include <string>
+
+#ifdef _WIN32
+#include <windows.h>
+#include <commdlg.h>
+// 打开系统文件选择对话框，返回选中的绝对路径；取消则返回空串
+static std::string openImageFileDialog() {
+    char szFile[1024] = {0};
+    OPENFILENAMEA ofn = {0};
+    ofn.lStructSize = sizeof(ofn);
+    ofn.lpstrFile   = szFile;
+    ofn.nMaxFile    = sizeof(szFile);
+    ofn.lpstrFilter = "Images\0*.png;*.jpg;*.jpeg;*.tga;*.bmp;*.hdr\0All\0*.*\0";
+    ofn.nFilterIndex = 1;
+    ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST | OFN_NOCHANGEDIR;
+    if (GetOpenFileNameA(&ofn))
+        return std::string(szFile);
+    return std::string();
+}
+#else
+static std::string openImageFileDialog() { return std::string(); }
+#endif
 
 // 公共：绘制 MaterialParams 滑条，返回是否有变化
 static bool drawMaterial(MaterialParams& m, bool hasSSS = false) {
@@ -14,42 +36,33 @@ static bool drawMaterial(MaterialParams& m, bool hasSSS = false) {
     ImGui::Spacing();
     ImGui::TextColored({0.8f,0.8f,0.5f,1.0f}, "Textures (drag file path):");
 
-    static char bcBuf[512], roBuf[512], nrBuf[512];
-    // basecolor
-    strncpy(bcBuf, m.baseColorTex.c_str(), sizeof(bcBuf)-1); bcBuf[sizeof(bcBuf)-1]=0;
-    ImGui::SetNextItemWidth(-1);
-    if (ImGui::InputText("##bc", bcBuf, sizeof(bcBuf))) {
-        m.baseColorTex = bcBuf; changed = true;
-    }
-    ImGui::SameLine(0,0); ImGui::TextDisabled(" BaseColor");
-    if (!m.baseColorTex.empty()) {
-        ImGui::SameLine();
-        if (ImGui::SmallButton("x##bc")) { m.baseColorTex.clear(); changed = true; }
-    }
+    // 每张贴图一行：标签在上，只读路径框 + 浏览(...) + 清除(x)
+    auto texRow = [&](const char* label, const char* id, std::string& path) {
+        ImGui::TextDisabled("%s", label);
+        char buf[512];
+        strncpy(buf, path.c_str(), sizeof(buf)-1); buf[sizeof(buf)-1] = 0;
 
-    // roughness/metallic
-    strncpy(roBuf, m.roughnessTex.c_str(), sizeof(roBuf)-1); roBuf[sizeof(roBuf)-1]=0;
-    ImGui::SetNextItemWidth(-1);
-    if (ImGui::InputText("##ro", roBuf, sizeof(roBuf))) {
-        m.roughnessTex = roBuf; changed = true;
-    }
-    ImGui::SameLine(0,0); ImGui::TextDisabled(" Roughness(R)/Metallic(G)");
-    if (!m.roughnessTex.empty()) {
-        ImGui::SameLine();
-        if (ImGui::SmallButton("x##ro")) { m.roughnessTex.clear(); changed = true; }
-    }
+        // 路径框只读（避免手输错误路径），点击浏览按钮选择文件
+        ImGui::SetNextItemWidth(-56.0f);  // 给右侧两个按钮留位
+        ImGui::InputText(id, buf, sizeof(buf), ImGuiInputTextFlags_ReadOnly);
 
-    // normal
-    strncpy(nrBuf, m.normalTex.c_str(), sizeof(nrBuf)-1); nrBuf[sizeof(nrBuf)-1]=0;
-    ImGui::SetNextItemWidth(-1);
-    if (ImGui::InputText("##nr", nrBuf, sizeof(nrBuf))) {
-        m.normalTex = nrBuf; changed = true;
-    }
-    ImGui::SameLine(0,0); ImGui::TextDisabled(" Normal Map");
-    if (!m.normalTex.empty()) {
         ImGui::SameLine();
-        if (ImGui::SmallButton("x##nr")) { m.normalTex.clear(); changed = true; }
-    }
+        char browseBtn[16]; snprintf(browseBtn, sizeof(browseBtn), "...%s", id);
+        if (ImGui::Button(browseBtn)) {
+            std::string sel = openImageFileDialog();
+            if (!sel.empty()) { path = sel; changed = true; }
+        }
+
+        ImGui::SameLine();
+        char clrBtn[16]; snprintf(clrBtn, sizeof(clrBtn), "x%s", id);
+        if (ImGui::Button(clrBtn)) {
+            if (!path.empty()) { path.clear(); changed = true; }
+        }
+    };
+
+    texRow("BaseColor",                "##bc", m.baseColorTex);
+    texRow("Roughness(R)/Metallic(G)", "##ro", m.roughnessTex);
+    texRow("Normal Map",               "##nr", m.normalTex);
     return changed;
 }
 
@@ -68,6 +81,7 @@ bool TrunkNode::drawProperties() {
         changed |= ImGui::SliderFloat("Bend Angle",   &params.bendAngle,   0.0f, 60.0f);
         changed |= ImGui::SliderInt  ("Sides",        &params.sides,       3, 16);
         changed |= ImGui::SliderInt  ("Length Segs",  &params.lengthSegs,  2, 16);
+        changed |= ImGui::SliderFloat("UV Tiling",    &params.uvTiling,    0.1f, 20.0f);
         changed |= ImGui::SliderInt  ("Seed",         &params.seed,        0, 999);
     }
     if (ImGui::CollapsingHeader("Material", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -83,19 +97,24 @@ BranchNode::BranchNode() { type = NodeType::Branch; }
 
 bool BranchNode::drawProperties() {
     bool changed = false;
-    if (ImGui::CollapsingHeader("Geometry", ImGuiTreeNodeFlags_DefaultOpen)) {
+    // Generation：生成规律 —— 生成多少、方位如何分布
+    if (ImGui::CollapsingHeader("Generation", ImGuiTreeNodeFlags_DefaultOpen)) {
+        changed |= ImGui::SliderInt  ("Branch Count",  &params.branchCount,  1, 8);
+        changed |= ImGui::SliderFloat("Rotate Offset", &params.rotateOffset, 0.0f, 360.0f);
+        changed |= ImGui::SliderInt  ("Seed",          &params.seed,         0, 999);
+    }
+    // Spine：单根枝条形态 —— 长度、粗细、下垂、弯曲
+    if (ImGui::CollapsingHeader("Spine", ImGuiTreeNodeFlags_DefaultOpen)) {
         changed |= ImGui::SliderFloat("Length Ratio",  &params.lengthRatio,  0.1f, 1.0f);
         changed |= ImGui::SliderFloat("Start Radius",  &params.startRadius,  0.01f, 0.3f);
         changed |= ImGui::SliderFloat("End Radius",    &params.endRadius,    0.002f, 0.1f);
         changed |= ImGui::SliderFloat("Spread Angle",  &params.spreadAngle,  10.0f, 90.0f);
-        changed |= ImGui::SliderFloat("Rotate Offset", &params.rotateOffset, 0.0f, 360.0f);
         changed |= ImGui::SliderFloat("Gravity",       &params.gravity,      0.0f, 1.0f);
         changed |= ImGui::SliderInt  ("Bend Count",    &params.bendCount,    0, 5);
         changed |= ImGui::SliderFloat("Bend Angle",    &params.bendAngle,    0.0f, 60.0f);
-        changed |= ImGui::SliderInt  ("Branch Count",  &params.branchCount,  1, 8);
         changed |= ImGui::SliderInt  ("Sides",         &params.sides,        3, 12);
         changed |= ImGui::SliderInt  ("Length Segs",   &params.lengthSegs,   2, 8);
-        changed |= ImGui::SliderInt  ("Seed",          &params.seed,         0, 999);
+        changed |= ImGui::SliderFloat("UV Tiling",     &params.uvTiling,     0.1f, 20.0f);
     }
     if (ImGui::CollapsingHeader("Material", ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui::PushID("mat_branch");
@@ -110,20 +129,25 @@ TwigNode::TwigNode() { type = NodeType::Twig; }
 
 bool TwigNode::drawProperties() {
     bool changed = false;
-    if (ImGui::CollapsingHeader("Geometry", ImGuiTreeNodeFlags_DefaultOpen)) {
+    // Generation：生成规律
+    if (ImGui::CollapsingHeader("Generation", ImGuiTreeNodeFlags_DefaultOpen)) {
+        changed |= ImGui::SliderInt  ("Twig Count",    &params.twigCount,    1, 10);
+        changed |= ImGui::SliderFloat("Rotate Offset", &params.rotateOffset, 0.0f, 360.0f);
+        changed |= ImGui::Checkbox   ("Alternating",   &params.alternating);
+        changed |= ImGui::SliderInt  ("Seed",          &params.seed,         0, 999);
+    }
+    // Spine：单根细枝形态
+    if (ImGui::CollapsingHeader("Spine", ImGuiTreeNodeFlags_DefaultOpen)) {
         changed |= ImGui::SliderFloat("Length Ratio",  &params.lengthRatio,  0.1f, 1.0f);
         changed |= ImGui::SliderFloat("Start Radius",  &params.startRadius,  0.005f, 0.1f);
         changed |= ImGui::SliderFloat("End Radius",    &params.endRadius,    0.001f, 0.05f);
         changed |= ImGui::SliderFloat("Spread Angle",  &params.spreadAngle,  10.0f, 90.0f);
-        changed |= ImGui::SliderFloat("Rotate Offset", &params.rotateOffset, 0.0f, 360.0f);
         changed |= ImGui::SliderFloat("Gravity",       &params.gravity,      0.0f, 1.0f);
         changed |= ImGui::SliderInt  ("Bend Count",    &params.bendCount,    0, 5);
         changed |= ImGui::SliderFloat("Bend Angle",    &params.bendAngle,    0.0f, 60.0f);
-        changed |= ImGui::SliderInt  ("Twig Count",    &params.twigCount,    1, 10);
         changed |= ImGui::SliderInt  ("Sides",         &params.sides,        3, 8);
         changed |= ImGui::SliderInt  ("Length Segs",   &params.lengthSegs,   2, 6);
-        changed |= ImGui::Checkbox   ("Alternating",   &params.alternating);
-        changed |= ImGui::SliderInt  ("Seed",          &params.seed,         0, 999);
+        changed |= ImGui::SliderFloat("UV Tiling",     &params.uvTiling,     0.1f, 20.0f);
     }
     if (ImGui::CollapsingHeader("Material", ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui::PushID("mat_twig");

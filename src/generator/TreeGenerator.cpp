@@ -56,7 +56,8 @@ MeshBatch& TreeGenerator::getBatch(const MaterialParams& mat, bool isLeaf) {
 }
 
 void TreeGenerator::appendCylinder(MeshBatch& batch,
-                                    const std::vector<BranchRing>& rings, int sides) {
+                                    const std::vector<BranchRing>& rings, int sides,
+                                    float uvTiling) {
     if (rings.size() < 2) return;
     float pi2 = glm::two_pi<float>();
 
@@ -71,8 +72,9 @@ void TreeGenerator::appendCylinder(MeshBatch& batch,
         const BranchRing& bot = rings[ri];
         const BranchRing& top = rings[ri+1];
         float segLen = glm::length(top.center - bot.center);
-        float vBot = vAccum / totalLen;
-        float vTop = (vAccum + segLen) / totalLen;
+        // V 沿长度平铺 uvTiling 次，避免整段被单张纹理纵向拉伸
+        float vBot = (vAccum / totalLen) * uvTiling;
+        float vTop = ((vAccum + segLen) / totalLen) * uvTiling;
         vAccum += segLen;
 
         // 每个顶点: pos(3)+normal(3)+uv(2) = 8 floats
@@ -157,7 +159,7 @@ std::vector<BranchRing> TreeGenerator::buildTrunk(
     if (!rings.empty()) rings[0].radius = p.startRadius * p.baseFlare;
 
     auto& batch = getBatch(p.material, false);
-    appendCylinder(batch, rings, p.sides);
+    appendCylinder(batch, rings, p.sides, p.uvTiling);
     return rings;
 }
 
@@ -198,7 +200,7 @@ void TreeGenerator::buildBranches(
             p.lengthSegs, p.bendCount, p.bendAngle, rng);
 
         auto& batch = getBatch(p.material, false);
-        appendCylinder(batch, rings, p.sides);
+        appendCylinder(batch, rings, p.sides, p.uvTiling);
 
         // 子节点从branch末端（折弯后的真实末端）出发
         glm::vec3 tip      = rings.empty() ? attachPos + branchDir * thisLen : rings.back().center;
@@ -250,7 +252,7 @@ void TreeGenerator::buildTwig(
             p.lengthSegs, p.bendCount, p.bendAngle, rng);
 
         auto& batch = getBatch(p.material, false);
-        appendCylinder(batch, rings, p.sides);
+        appendCylinder(batch, rings, p.sides, p.uvTiling);
 
         glm::vec3 tip    = rings.empty() ? attachPos + twigDir * thisLen : rings.back().center;
         glm::vec3 tipDir = rings.empty() ? twigDir : rings.back().up;
