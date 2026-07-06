@@ -32,6 +32,8 @@ struct TrunkParams {
     float noiseFreq   = 2.5f;   // 噪声频率: 越大扭动越频繁
     float gnarl       = 15.0f;  // 螺旋扭曲总角度(度): 树皮沿长度旋拧的苍劲感
     float taperPow    = 1.6f;   // 锥度曲线幂(1=线性, >1基部饱满/末端尖锐)
+    int   jointCount  = 0;      // 竹节数(0=无节): >0 时沿长度周期性膨大, 配合直竿做竹子
+    float jointBulge  = 0.0f;   // 竹节膨大幅度(半径倍增比例)
     int   sides       = 8;
     int   lengthSegs  = 10;
     int   seed        = 1;
@@ -54,6 +56,8 @@ struct BranchParams {
     float noiseAmount  = 30.0f;  // 样条噪声扰动强度(度)
     float noiseFreq    = 3.0f;   // 噪声频率
     float gnarl        = 10.0f;  // 螺旋扭曲总角度(度)
+    int   jointCount   = 0;      // 竹节数(0=无节): 用于竹类分枝的周期性膨大
+    float jointBulge   = 0.0f;   // 竹节膨大幅度(半径倍增比例)
     int   branchCount  = 4;
     int   sides        = 6;
     int   lengthSegs   = 6;
@@ -90,7 +94,10 @@ struct LeafClusterParams {
     int         leafCount     = 20;
     float       clusterRadius = 0.35f;
     float       leafSize      = 0.22f;
+    float       leafAspect    = 0.65f;  // 叶片宽/高比: 小值=细长叶(竹叶/蕨类小叶), 大值=宽叶
     float       normalJitter  = 0.35f;
+    bool        planar        = false;  // true=平面羽状排列(蕨类叶轴两侧), false=黄金角3D辐射
+    float       sizeFalloff   = 0.0f;   // 沿叶轴向梢部的缩小比例[0,1]: 蕨类小叶向尖端渐小
     int         seed          = 4;
     MaterialParams material = {{0.15f,0.48f,0.06f}, 0.75f, 0.0f, 0.4f, 0.45f};
 };

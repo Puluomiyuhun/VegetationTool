@@ -26,12 +26,15 @@ public:
     // noiseFreq:   扰动频率, 越大方向变化越频繁
     // gnarl:       沿枝干长度累计的螺旋扭转总角度(度)
     // taperPow:    锥度曲线幂(1=线性插值, >1基部饱满末端尖锐)
+    // jointCount:  沿长度的竹节数(0=无节, 用于竹子): 在每个节位周期性膨大半径
+    // jointBulge:  竹节膨大幅度(半径倍增比例, 0=无膨大)
     static std::vector<BranchRing> buildNaturalRings(
         glm::vec3 origin, glm::vec3 dir, float length,
         float radiusStart, float radiusEnd,
         int lengthSegs, float noiseAmount, float noiseFreq,
         float gnarl, float taperPow, float gravity,
-        std::mt19937& rng);
+        std::mt19937& rng,
+        int jointCount = 0, float jointBulge = 0.0f);
 
     static void buildCap(
         const BranchRing& bottom, const BranchRing& top,

@@ -85,6 +85,8 @@ bool TrunkNode::drawProperties() {
         changed |= ImGui::SliderFloat("Noise Amount", &params.noiseAmount, 0.0f, 90.0f);
         changed |= ImGui::SliderFloat("Noise Freq",   &params.noiseFreq,   0.5f, 8.0f);
         changed |= ImGui::SliderFloat("Gnarl",        &params.gnarl,       0.0f, 90.0f);
+        changed |= ImGui::SliderInt  ("Joint Count",  &params.jointCount,  0, 20);
+        changed |= ImGui::SliderFloat("Joint Bulge",  &params.jointBulge,  0.0f, 1.0f);
         changed |= ImGui::SliderInt  ("Sides",        &params.sides,       3, 16);
         changed |= ImGui::SliderInt  ("Length Segs",  &params.lengthSegs,  2, 24);
         changed |= ImGui::SliderFloat("UV Tiling",    &params.uvTiling,    0.1f, 20.0f);
@@ -129,6 +131,8 @@ bool BranchNode::drawProperties() {
         changed |= ImGui::SliderFloat("Noise Amount",   &params.noiseAmount,  0.0f, 90.0f);
         changed |= ImGui::SliderFloat("Noise Freq",     &params.noiseFreq,    0.5f, 8.0f);
         changed |= ImGui::SliderFloat("Gnarl",          &params.gnarl,        0.0f, 90.0f);
+        changed |= ImGui::SliderInt  ("Joint Count",    &params.jointCount,   0, 20);
+        changed |= ImGui::SliderFloat("Joint Bulge",    &params.jointBulge,   0.0f, 1.0f);
         changed |= ImGui::SliderInt  ("Sides",         &params.sides,        3, 12);
         changed |= ImGui::SliderInt  ("Length Segs",   &params.lengthSegs,   2, 16);
         changed |= ImGui::SliderFloat("UV Tiling",     &params.uvTiling,     0.1f, 20.0f);
@@ -189,7 +193,10 @@ bool LeafClusterNode::drawProperties() {
         changed |= ImGui::SliderInt  ("Leaf Count",     &params.leafCount,     4, 64);
         changed |= ImGui::SliderFloat("Cluster Radius", &params.clusterRadius, 0.05f, 1.0f);
         changed |= ImGui::SliderFloat("Leaf Size",      &params.leafSize,      0.02f, 0.8f);
+        changed |= ImGui::SliderFloat("Leaf Aspect",    &params.leafAspect,    0.1f, 1.5f);
         changed |= ImGui::SliderFloat("Normal Jitter",  &params.normalJitter,  0.0f, 1.0f);
+        changed |= ImGui::Checkbox   ("Planar (fern)",  &params.planar);
+        changed |= ImGui::SliderFloat("Size Falloff",   &params.sizeFalloff,   0.0f, 1.0f);
         changed |= ImGui::SliderInt  ("Seed",           &params.seed,          0, 999);
     }
     if (ImGui::CollapsingHeader("Material", ImGuiTreeNodeFlags_DefaultOpen)) {

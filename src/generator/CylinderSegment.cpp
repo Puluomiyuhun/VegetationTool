@@ -68,7 +68,8 @@ std::vector<BranchRing> CylinderSegment::buildNaturalRings(
     float radiusStart, float radiusEnd,
     int lengthSegs, float noiseAmount, float noiseFreq,
     float gnarl, float taperPow, float gravity,
-    std::mt19937& rng)
+    std::mt19937& rng,
+    int jointCount, float jointBulge)
 {
     lengthSegs = std::max(1, lengthSegs);
     taperPow   = std::max(0.05f, taperPow);
@@ -84,6 +85,13 @@ std::vector<BranchRing> CylinderSegment::buildNaturalRings(
     std::uniform_real_distribution<float> phase(0.0f, pi2);
     float phA = phase(rng), phB = phase(rng);
 
+    // 竹节：沿长度周期性膨大半径。峰值落在整数节位，高次幂使膨大带很窄。
+    auto jointFactor = [&](float t) -> float {
+        if (jointCount <= 0 || jointBulge <= 0.0f) return 1.0f;
+        float pulse = 0.5f + 0.5f * std::cos(t * (float)jointCount * pi2);
+        return 1.0f + jointBulge * std::pow(pulse, 6.0f);
+    };
+
     std::vector<BranchRing> rings;
     rings.reserve(lengthSegs + 1);
 
@@ -96,7 +104,7 @@ std::vector<BranchRing> CylinderSegment::buildNaturalRings(
     {
         BranchRing r0;
         r0.center = curOrigin;
-        r0.radius = radiusStart;
+        r0.radius = radiusStart * jointFactor(0.0f);
         r0.up     = curDir;
         r0.right  = right;
         rings.push_back(r0);
@@ -132,7 +140,7 @@ std::vector<BranchRing> CylinderSegment::buildNaturalRings(
         float rf = std::pow(t, taperPow);
         BranchRing ring;
         ring.center = curOrigin;
-        ring.radius = glm::mix(radiusStart, radiusEnd, rf);
+        ring.radius = glm::mix(radiusStart, radiusEnd, rf) * jointFactor(t);
         ring.up     = curDir;
         ring.right  = right;
         rings.push_back(ring);

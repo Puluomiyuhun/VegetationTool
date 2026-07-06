@@ -40,6 +40,8 @@ void writeNode(std::ostream& o, const TreeNode* n) {
         o << "noiseFreq "   << p.noiseFreq   << '\n';
         o << "gnarl "       << p.gnarl       << '\n';
         o << "taperPow "    << p.taperPow    << '\n';
+        o << "jointCount "  << p.jointCount  << '\n';
+        o << "jointBulge "  << p.jointBulge  << '\n';
         o << "sides "       << p.sides       << '\n';
         o << "lengthSegs "  << p.lengthSegs  << '\n';
         o << "seed "        << p.seed        << '\n';
@@ -85,6 +87,8 @@ void writeNode(std::ostream& o, const TreeNode* n) {
         o << "noiseFreq "   << p.noiseFreq   << '\n';
         o << "gnarl "       << p.gnarl       << '\n';
         o << "branchCount " << p.branchCount << '\n';
+        o << "jointCount "  << p.jointCount  << '\n';
+        o << "jointBulge "  << p.jointBulge  << '\n';
         o << "sides "       << p.sides       << '\n';
         o << "lengthSegs "  << p.lengthSegs  << '\n';
         o << "seed "        << p.seed        << '\n';
@@ -122,7 +126,10 @@ void writeNode(std::ostream& o, const TreeNode* n) {
         o << "leafCount "     << p.leafCount     << '\n';
         o << "clusterRadius " << p.clusterRadius << '\n';
         o << "leafSize "      << p.leafSize      << '\n';
+        o << "leafAspect "    << p.leafAspect    << '\n';
         o << "normalJitter "  << p.normalJitter  << '\n';
+        o << "planar "        << (p.planar ? 1 : 0) << '\n';
+        o << "sizeFalloff "   << p.sizeFalloff   << '\n';
         o << "seed "          << p.seed          << '\n';
         writeMaterial(o, p.material);
         break;
@@ -173,6 +180,7 @@ void applyParams(TreeNode* n, const KV& kv) {
         p.posX=getF(kv,"posX",p.posX); p.posZ=getF(kv,"posZ",p.posZ);
         p.noiseAmount=getF(kv,"noiseAmount",p.noiseAmount); p.noiseFreq=getF(kv,"noiseFreq",p.noiseFreq);
         p.gnarl=getF(kv,"gnarl",p.gnarl); p.taperPow=getF(kv,"taperPow",p.taperPow);
+        p.jointCount=getI(kv,"jointCount",p.jointCount); p.jointBulge=getF(kv,"jointBulge",p.jointBulge);
         p.sides=getI(kv,"sides",p.sides); p.lengthSegs=getI(kv,"lengthSegs",p.lengthSegs);
         p.seed=getI(kv,"seed",p.seed); p.uvTiling=getF(kv,"uvTiling",p.uvTiling);
         readMaterial(kv, p.material); break;
@@ -199,6 +207,7 @@ void applyParams(TreeNode* n, const KV& kv) {
         p.regionStart=getF(kv,"regionStart",p.regionStart); p.regionEnd=getF(kv,"regionEnd",p.regionEnd);
         p.noiseAmount=getF(kv,"noiseAmount",p.noiseAmount); p.noiseFreq=getF(kv,"noiseFreq",p.noiseFreq);
         p.gnarl=getF(kv,"gnarl",p.gnarl); p.branchCount=getI(kv,"branchCount",p.branchCount);
+        p.jointCount=getI(kv,"jointCount",p.jointCount); p.jointBulge=getF(kv,"jointBulge",p.jointBulge);
         p.sides=getI(kv,"sides",p.sides); p.lengthSegs=getI(kv,"lengthSegs",p.lengthSegs);
         p.seed=getI(kv,"seed",p.seed); p.uvTiling=getF(kv,"uvTiling",p.uvTiling);
         readMaterial(kv, p.material); break;
@@ -222,6 +231,8 @@ void applyParams(TreeNode* n, const KV& kv) {
         auto& p = static_cast<LeafClusterNode*>(n)->params;
         p.leafCount=getI(kv,"leafCount",p.leafCount); p.clusterRadius=getF(kv,"clusterRadius",p.clusterRadius);
         p.leafSize=getF(kv,"leafSize",p.leafSize); p.normalJitter=getF(kv,"normalJitter",p.normalJitter);
+        p.leafAspect=getF(kv,"leafAspect",p.leafAspect);
+        p.planar=getI(kv,"planar",p.planar?1:0)!=0; p.sizeFalloff=getF(kv,"sizeFalloff",p.sizeFalloff);
         p.seed=getI(kv,"seed",p.seed);
         readMaterial(kv, p.material); break;
     }

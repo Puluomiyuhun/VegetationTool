@@ -243,7 +243,8 @@ std::vector<BranchRing> TreeGenerator::buildTrunk(
         origin, dir, p.length,
         p.startRadius * p.baseFlare, p.endRadius,
         p.lengthSegs, p.noiseAmount, p.noiseFreq,
-        p.gnarl, p.taperPow, 0.0f, rng);
+        p.gnarl, p.taperPow, 0.0f, rng,
+        p.jointCount, p.jointBulge);
 
     if (!rings.empty()) rings[0].radius = p.startRadius * p.baseFlare;
 
@@ -306,7 +307,8 @@ void TreeGenerator::buildBranches(
             surfacePos, branchDir, thisLen,
             startR, endR,
             p.lengthSegs, p.noiseAmount, p.noiseFreq,
-            p.gnarl, p.taperPow, p.gravity, rng);
+            p.gnarl, p.taperPow, p.gravity, rng,
+            p.jointCount, p.jointBulge);
 
         auto& batch = getBatch(p.material, false);
         appendCylinder(batch, rings, p.sides, p.uvTiling);
@@ -485,38 +487,56 @@ void TreeGenerator::buildLeafCluster(
         // 附着点：沿整根枝条均匀分布(带轻微抖动)，而非全挤在末端
         glm::vec3 axisPos, axisDir, axisRight;
         float     axisRadius = 0.0f;
+        float     sizeT = 0.5f;   // 沿叶轴位置(0=基部,1=梢部)，用于 sizeFalloff
         if (haveRings) {
             float t = (p.leafCount > 1) ? (float)i / (float)(p.leafCount - 1) : 0.5f;
             t = glm::clamp(t + (rot01(rng) - 0.5f) / (float)p.leafCount, 0.0f, 1.0f);
+            sizeT = t;
             sampleRings(*parentRings, t, axisPos, axisDir, axisRight, axisRadius);
         } else {
+            sizeT = (p.leafCount > 1) ? (float)i / (float)(p.leafCount - 1) : 0.5f;
             axisPos = origin;
             axisDir = glm::normalize(dir);
             axisRight = perpendicular(axisDir);
         }
         axisDir = glm::normalize(axisDir);
+        glm::vec3 fwd = glm::normalize(glm::cross(axisDir, axisRight));
 
-        // 绕枝条轴的随机方位(黄金角+抖动)，构造垂直于枝条方向的外扩方向
-        float az = goldenAngle * (float)i + (rot01(rng) - 0.5f) * 0.7f;
-        glm::vec3 fwd    = glm::normalize(glm::cross(axisDir, axisRight));
-        glm::vec3 outDir = glm::normalize(axisRight * std::cos(az) + fwd * std::sin(az));
+        // 外扩方向：平面模式=小叶交替伸向叶轴两侧(蕨类)，否则黄金角3D辐射
+        glm::vec3 outDir;
+        if (p.planar) {
+            float side = (i % 2 == 0) ? 1.0f : -1.0f;
+            float wob  = (rot01(rng) - 0.5f) * 0.25f;  // 轻微抖动避免完全规则
+            outDir = glm::normalize(axisRight * side + fwd * wob);
+        } else {
+            float az = goldenAngle * (float)i + (rot01(rng) - 0.5f) * 0.7f;
+            outDir = glm::normalize(axisRight * std::cos(az) + fwd * std::sin(az));
+        }
 
         // 叶片生长方向：以垂直外扩为主，略向枝梢方向前倾 + 抖动
         glm::vec3 leafUp = glm::normalize(outDir + axisDir * (0.25f + jitter(rng)));
 
-        // 叶基贴在枝条表面，叶片向外伸展
+        // 叶基贴在枝条表面，叶片向外伸展。sizeFalloff 令小叶向梢部渐小(蕨类)
         glm::vec3 basePos = axisPos + outDir * axisRadius;
-        float hs = p.leafSize * 0.5f;
-        float hw = hs * 0.65f;
+        float sizeScale = 1.0f - p.sizeFalloff * sizeT;
+        float hs = p.leafSize * 0.5f * sizeScale;
+        float hw = hs * p.leafAspect;   // 宽高比: 小值=细长叶(竹叶/蕨类小叶)
         glm::vec3 pos = basePos + leafUp * ((hs + p.clusterRadius * 0.4f) * radJit(rng));
 
-        // 叶面朝向：在垂直于 leafUp 的平面内随机选一个法线朝向
-        glm::vec3 tmp = (std::abs(leafUp.y) < 0.95f) ? glm::vec3(0,1,0) : glm::vec3(1,0,0);
-        glm::vec3 leafRight = glm::normalize(glm::cross(leafUp, tmp));
-        glm::vec3 leafFwd   = glm::normalize(glm::cross(leafRight, leafUp));
-        float rot = rot01(rng) * pi2;
-        leafRight = glm::normalize(leafRight * std::cos(rot) + leafFwd * std::sin(rot));
-        leafFwd   = glm::normalize(glm::cross(leafRight, leafUp));
+        // 叶面朝向：平面模式统一朝叶轴平面法线(共面平铺)，否则随机旋转
+        glm::vec3 leafRight, leafFwd;
+        if (p.planar) {
+            leafFwd   = fwd;
+            leafRight = glm::normalize(glm::cross(leafUp, leafFwd));
+            leafFwd   = glm::normalize(glm::cross(leafRight, leafUp));
+        } else {
+            glm::vec3 tmp = (std::abs(leafUp.y) < 0.95f) ? glm::vec3(0,1,0) : glm::vec3(1,0,0);
+            leafRight = glm::normalize(glm::cross(leafUp, tmp));
+            leafFwd   = glm::normalize(glm::cross(leafRight, leafUp));
+            float rot = rot01(rng) * pi2;
+            leafRight = glm::normalize(leafRight * std::cos(rot) + leafFwd * std::sin(rot));
+            leafFwd   = glm::normalize(glm::cross(leafRight, leafUp));
+        }
 
         // 4顶点，带UV: 左下(0,0) 右下(1,0) 右上(1,1) 左上(0,1)
         struct LV { glm::vec3 pos; float u, v; };
