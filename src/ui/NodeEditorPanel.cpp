@@ -7,6 +7,7 @@ namespace ned = ax::NodeEditor;
 ImVec4 NodeEditorPanel::nodeColor(NodeType type) {
     switch (type) {
         case NodeType::Trunk:       return {0.45f, 0.28f, 0.12f, 1.0f};
+        case NodeType::Roots:       return {0.30f, 0.20f, 0.14f, 1.0f};
         case NodeType::Branch:      return {0.35f, 0.22f, 0.08f, 1.0f};
         case NodeType::Twig:        return {0.28f, 0.18f, 0.05f, 1.0f};
         case NodeType::LeafCluster: return {0.15f, 0.45f, 0.08f, 1.0f};
@@ -84,6 +85,8 @@ void NodeEditorPanel::render(NodeGraph& graph, NodeId& selectedNodeId) {
                   (ned::PinId)link.toPin);
 
     // ---- 交互处理 ----
+    // 注意: BeginCreate/BeginDelete 即使返回 false 也会置内部 m_InActive=true,
+    // 因此 EndCreate/EndDelete 必须无条件调用(在 if 之外), 否则下一帧断言崩溃。
     if (ned::BeginCreate()) {
         ned::PinId fromId, toId;
         if (ned::QueryNewLink(&fromId, &toId)) {
@@ -91,8 +94,8 @@ void NodeEditorPanel::render(NodeGraph& graph, NodeId& selectedNodeId) {
                 graph.addLink((PinId)fromId.Get(), (PinId)toId.Get());
             }
         }
-        ned::EndCreate();
     }
+    ned::EndCreate();
 
     if (ned::BeginDelete()) {
         ned::LinkId deletedLinkId;
@@ -104,9 +107,8 @@ void NodeEditorPanel::render(NodeGraph& graph, NodeId& selectedNodeId) {
         while (ned::QueryDeletedNode(&deletedNodeId))
             if (ned::AcceptDeletedItem())
                 graph.removeNode((NodeId)deletedNodeId.Get());
-
-        ned::EndDelete();
     }
+    ned::EndDelete();
 
     // 选中检测
     std::vector<ned::NodeId> sel(ned::GetSelectedObjectCount());
@@ -134,6 +136,8 @@ void NodeEditorPanel::handleContextMenu(NodeGraph& graph) {
 
         if (ImGui::MenuItem("Add Trunk"))
             graph.addNode(NodeType::Trunk, canvasPos);
+        if (ImGui::MenuItem("Add Roots"))
+            graph.addNode(NodeType::Roots, canvasPos);
         if (ImGui::MenuItem("Add Branch"))
             graph.addNode(NodeType::Branch, canvasPos);
         if (ImGui::MenuItem("Add Twig"))

@@ -6,6 +6,7 @@
 static std::unique_ptr<TreeNode> makeNode(NodeType type) {
     switch (type) {
         case NodeType::Trunk:       return std::make_unique<TrunkNode>();
+        case NodeType::Roots:       return std::make_unique<RootsNode>();
         case NodeType::Branch:      return std::make_unique<BranchNode>();
         case NodeType::Twig:        return std::make_unique<TwigNode>();
         case NodeType::LeafCluster: return std::make_unique<LeafClusterNode>();

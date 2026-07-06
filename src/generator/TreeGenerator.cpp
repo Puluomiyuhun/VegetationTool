@@ -210,6 +210,10 @@ void TreeGenerator::processNode(
             buildTwig(static_cast<const TwigNode*>(node),
                       graph, *parentRings, parentLen, depth);
         break;
+    case NodeType::Roots:
+        if (parentRings && !parentRings->empty())
+            buildRoots(static_cast<const RootsNode*>(node), *parentRings);
+        break;
     case NodeType::LeafCluster:
         buildLeafCluster(static_cast<const LeafClusterNode*>(node), origin, dir);
         break;
@@ -366,6 +370,59 @@ void TreeGenerator::buildTwig(
             else
                 processNode(graph, child, &rings, attachPos, twigDir, thisLen, depth+1);
         }
+    }
+}
+
+// ---- Roots ----
+// 从树干“基部”一圈向外辐射铺开，再借 droop(下扎)沿长度逐渐转向地下，
+// 末端按锥度收细成尖。方位用黄金角分布，接壤处套用枝领裙边贴合树干。
+void TreeGenerator::buildRoots(
+    const RootsNode* node, const std::vector<BranchRing>& parentRings)
+{
+    const auto& p = node->params;
+    std::mt19937 rng(p.seed + 500);
+    std::uniform_real_distribution<float> jitter(-6.0f, 6.0f);
+    std::uniform_real_distribution<float> jitterLen(0.8f, 1.25f);
+
+    // 树干基部环(t=0)：附着中心、轴向、half、半径
+    glm::vec3 basePos, baseDir, baseRight;
+    float     baseRadius = 1.0f;
+    sampleRings(parentRings, 0.0f, basePos, baseDir, baseRight, baseRadius);
+
+    auto& batch = getBatch(p.material, false);
+
+    for (int i = 0; i < p.rootCount; ++i) {
+        float az = i * p.rotateOffset + jitter(rng);
+        float el = p.spreadAngle + jitter(rng);  // 接近90°=先近水平铺开
+
+        // 以树干轴为参考，先抬到 spreadAngle 再绕轴旋方位
+        glm::vec3 rootDir = rotateAroundAxis(baseDir, baseRight, el);
+        rootDir = rotateAroundAxis(rootDir, baseDir, az);
+        rootDir = glm::normalize(rootDir);
+
+        float thisLen = p.length * jitterLen(rng);
+        float startR  = baseRadius * p.radiusScale;
+        float endR    = startR * p.endRatio;
+
+        // 从树干“表面”发出，而非从轴心穿出
+        glm::vec3 radial = rootDir - baseDir * glm::dot(rootDir, baseDir);
+        glm::vec3 surfacePos = (glm::length(radial) > 1e-4f)
+            ? basePos + glm::normalize(radial) * baseRadius
+            : basePos;
+
+        // droop 作为“重力”参数传入，使根沿长度持续向下弯扎入地
+        auto rings = CylinderSegment::buildNaturalRings(
+            surfacePos, rootDir, thisLen,
+            startR, endR,
+            p.lengthSegs, p.noiseAmount, p.noiseFreq,
+            p.gnarl, p.taperPow, p.droop, rng);
+
+        appendCylinder(batch, rings, p.sides, p.uvTiling);
+        // 根领：接壤处裙边贴合树干表面
+        if (!rings.empty())
+            appendCollar(batch, basePos, baseDir, baseRadius,
+                         rings.front().center, rings.front().up, rings.front().right,
+                         startR, p.baseFlare, p.sides, p.uvTiling, thisLen);
     }
 }
 

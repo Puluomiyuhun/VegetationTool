@@ -37,6 +37,9 @@ private:
         const std::vector<BranchRing>& parentRings,
         float parentLen, int depth);
 
+    void buildRoots(const RootsNode* node,
+        const std::vector<BranchRing>& parentRings);
+
     void buildLeafCluster(const LeafClusterNode* node,
         glm::vec3 origin, glm::vec3 dir);
 

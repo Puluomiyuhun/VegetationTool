@@ -183,3 +183,38 @@ bool LeafClusterNode::drawProperties() {
     }
     return changed;
 }
+
+// ---------- RootsNode ----------
+RootsNode::RootsNode() { type = NodeType::Roots; }
+
+bool RootsNode::drawProperties() {
+    bool changed = false;
+    // Generation：生成规律 —— 根条数、方位分布
+    if (ImGui::CollapsingHeader("Generation", ImGuiTreeNodeFlags_DefaultOpen)) {
+        changed |= ImGui::SliderInt  ("Root Count",    &params.rootCount,    1, 16);
+        changed |= ImGui::SliderFloat("Rotate Offset", &params.rotateOffset, 0.0f, 360.0f);
+        changed |= ImGui::SliderInt  ("Seed",          &params.seed,         0, 999);
+    }
+    // Spine：单根根系形态 —— 长度、粗细、张开、下扎
+    if (ImGui::CollapsingHeader("Spine", ImGuiTreeNodeFlags_DefaultOpen)) {
+        changed |= ImGui::SliderFloat("Length",       &params.length,      0.5f, 10.0f);
+        changed |= ImGui::SliderFloat("Radius Scale", &params.radiusScale, 0.1f, 2.0f);
+        changed |= ImGui::SliderFloat("End Ratio",    &params.endRatio,    0.01f, 0.5f);
+        changed |= ImGui::SliderFloat("Taper Power",  &params.taperPow,    0.5f, 4.0f);
+        changed |= ImGui::SliderFloat("Base Flare",   &params.baseFlare,   1.0f, 5.0f);
+        changed |= ImGui::SliderFloat("Spread Angle", &params.spreadAngle, 30.0f, 90.0f);
+        changed |= ImGui::SliderFloat("Droop",        &params.droop,       0.0f, 1.0f);
+        changed |= ImGui::SliderFloat("Noise Amount", &params.noiseAmount, 0.0f, 90.0f);
+        changed |= ImGui::SliderFloat("Noise Freq",   &params.noiseFreq,   0.5f, 8.0f);
+        changed |= ImGui::SliderFloat("Gnarl",        &params.gnarl,       0.0f, 90.0f);
+        changed |= ImGui::SliderInt  ("Sides",        &params.sides,       3, 12);
+        changed |= ImGui::SliderInt  ("Length Segs",  &params.lengthSegs,  2, 20);
+        changed |= ImGui::SliderFloat("UV Tiling",    &params.uvTiling,    0.1f, 20.0f);
+    }
+    if (ImGui::CollapsingHeader("Material", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::PushID("mat_roots");
+        changed |= drawMaterial(params.material, false);
+        ImGui::PopID();
+    }
+    return changed;
+}

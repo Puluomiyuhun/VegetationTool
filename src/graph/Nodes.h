@@ -13,6 +13,16 @@ public:
     bool        drawProperties() override;
 };
 
+// ---- Roots ----
+class RootsNode : public TreeNode {
+public:
+    RootsParams params;
+    RootsNode();
+    NodeType    getType()  const override { return NodeType::Roots; }
+    const char* getLabel() const override { return "Roots"; }
+    bool        drawProperties() override;
+};
+
 // ---- Branch ----
 class BranchNode : public TreeNode {
 public:

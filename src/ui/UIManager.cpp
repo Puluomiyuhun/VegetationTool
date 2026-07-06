@@ -137,7 +137,8 @@ void UIManager::init(GLFWwindow* window) {
     if (!font) {
         io.Fonts->AddFontDefault();
     }
-    io.Fonts->Build();
+    // 注意: 新版 ImGui 由后端自动构建字体图集(RendererHasTextures)，
+    // 不可再手动调用 io.Fonts->Build()，否则会触发断言崩溃。
 
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init("#version 330");

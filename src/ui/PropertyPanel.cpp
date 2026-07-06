@@ -56,6 +56,11 @@ void PropertyPanel::render(NodeId selectedNodeId, NodeGraph& graph) {
     ImGui::PopStyleColor();
     ImGui::SameLine();
 
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.30f,0.20f,0.14f,1.0f));
+    addChildBtn("+ Roots", NodeType::Roots);
+    ImGui::PopStyleColor();
+    ImGui::SameLine();
+
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.22f,0.14f,0.05f,1.0f));
     addChildBtn("+ Twig", NodeType::Twig);
     ImGui::PopStyleColor();
