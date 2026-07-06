@@ -242,10 +242,18 @@ void UIManager::render(NodeGraph& graph, NodeId& selectedNodeId,
         ImGui::SliderFloat("X##ld", &L.lightDir.x, -1.0f, 1.0f);
         ImGui::SliderFloat("Y##ld", &L.lightDir.y,  0.0f, 1.0f);
         ImGui::SliderFloat("Z##ld", &L.lightDir.z, -1.0f, 1.0f);
+        ImGui::SeparatorText("Intensity");
+        ImGui::SliderFloat("Light Intensity",   &L.lightIntensity,  0.0f, 8.0f);
+        ImGui::SliderFloat("Ambient Strength",  &L.ambientStrength, 0.0f, 4.0f);
+        ImGui::SliderFloat("Exposure",          &L.exposure,        0.1f, 4.0f);
         ImGui::SeparatorText("Colors");
         ImGui::ColorEdit3("Light Color",    &L.lightColor.x);
         ImGui::ColorEdit3("Sky Ambient",    &L.ambientTop.x);
         ImGui::ColorEdit3("Ground Ambient", &L.ambientBot.x);
+        ImGui::SeparatorText("Sky Background");
+        ImGui::ColorEdit3("Sky Top",     &L.skyTop.x);
+        ImGui::ColorEdit3("Sky Horizon", &L.skyHorizon.x);
+        ImGui::ColorEdit3("Sky Ground",  &L.skyGround.x);
     }
     ImGui::End();
 

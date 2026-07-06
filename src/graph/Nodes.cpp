@@ -119,6 +119,7 @@ bool BranchNode::drawProperties() {
         changed |= ImGui::SliderFloat("Base Flare",     &params.baseFlare,    1.0f, 5.0f);
         changed |= ImGui::SliderFloat("Taper Power",    &params.taperPow,     0.5f, 4.0f);
         changed |= ImGui::SliderFloat("Spread Angle",  &params.spreadAngle,  10.0f, 90.0f);
+        changed |= ImGui::SliderFloat("Down Angle",    &params.downAngle,    0.0f, 1.0f);
         changed |= ImGui::SliderFloat("Gravity",       &params.gravity,      0.0f, 1.0f);
         changed |= ImGui::SliderFloat("Noise Amount",   &params.noiseAmount,  0.0f, 90.0f);
         changed |= ImGui::SliderFloat("Noise Freq",     &params.noiseFreq,    0.5f, 8.0f);
@@ -157,6 +158,7 @@ bool TwigNode::drawProperties() {
         changed |= ImGui::SliderFloat("Base Flare",     &params.baseFlare,    1.0f, 5.0f);
         changed |= ImGui::SliderFloat("Taper Power",    &params.taperPow,     0.5f, 4.0f);
         changed |= ImGui::SliderFloat("Spread Angle",  &params.spreadAngle,  10.0f, 90.0f);
+        changed |= ImGui::SliderFloat("Down Angle",    &params.downAngle,    0.0f, 1.0f);
         changed |= ImGui::SliderFloat("Gravity",       &params.gravity,      0.0f, 1.0f);
         changed |= ImGui::SliderFloat("Noise Amount",   &params.noiseAmount,  0.0f, 90.0f);
         changed |= ImGui::SliderFloat("Noise Freq",     &params.noiseFreq,    0.5f, 8.0f);

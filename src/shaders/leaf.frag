@@ -24,6 +24,9 @@ uniform vec3  uLightDir;
 uniform vec3  uLightColor;
 uniform vec3  uAmbientTop;
 uniform vec3  uAmbientBot;
+uniform float uLightIntensity;
+uniform float uAmbientStrength;
+uniform float uExposure;
 
 out vec4 FragColor;
 
@@ -62,20 +65,21 @@ void main()
     float NdotL = max(dot(N, L), 0.0);
 
     float hemi   = dot(N, vec3(0,1,0)) * 0.5 + 0.5;
-    vec3 ambient = mix(uAmbientBot, uAmbientTop, hemi) * albedo * uAoStrength;
+    vec3 ambient = mix(uAmbientBot, uAmbientTop, hemi) * albedo * uAoStrength * uAmbientStrength;
 
-    vec3 diffuse = albedo * uLightColor * NdotL;
+    vec3 diffuse = albedo * uLightColor * uLightIntensity * NdotL;
 
     // SSS
     float backLight = max(dot(-N, L), 0.0);
-    vec3  sss       = albedo * uLightColor * backLight * uSssStrength * 0.6;
+    vec3  sss       = albedo * uLightColor * uLightIntensity * backLight * uSssStrength * 0.6;
 
     // 高光
     vec3  H    = normalize(V + L);
     float spec = pow(max(dot(N, H), 0.0), max(8.0 * (1.0 - roughness), 1.0));
-    vec3  specular = vec3(spec * 0.04 * (1.0 - roughness));
+    vec3  specular = vec3(spec * 0.04 * (1.0 - roughness)) * uLightIntensity;
 
     vec3 color = ambient + diffuse + sss + specular;
+    color *= uExposure;
     color = color / (color + vec3(1.0));
     color = pow(color, vec3(1.0/2.2));
 

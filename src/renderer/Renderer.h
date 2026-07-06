@@ -27,8 +27,15 @@ struct TreeMeshData {
 struct LightingParams {
     glm::vec3 lightDir    = glm::normalize(glm::vec3(0.5f, 1.0f, 0.3f));
     glm::vec3 lightColor  = {1.2f, 1.1f, 0.95f};
+    float     lightIntensity = 2.2f;   // 主光亮度倍增
+    float     ambientStrength = 1.4f;  // 环境光亮度倍增
+    float     exposure      = 1.3f;    // 曝光(色调映射前)
     glm::vec3 ambientTop  = {0.3f, 0.45f, 0.6f};
     glm::vec3 ambientBot  = {0.12f, 0.10f, 0.08f};
+    // 渐变天空背景(类 SpeedTree)
+    glm::vec3 skyTop      = {0.35f, 0.52f, 0.78f};  // 天顶蓝
+    glm::vec3 skyHorizon  = {0.78f, 0.76f, 0.70f};  // 地平线暖雾
+    glm::vec3 skyGround   = {0.52f, 0.50f, 0.47f};  // 地面灰
 };
 
 class Renderer {
@@ -57,10 +64,13 @@ private:
     Shader m_branchShader;
     Shader m_leafShader;
     Shader m_gridShader;
+    Shader m_skyShader;
     Mesh   m_gridMesh;
+    GLuint m_skyVao = 0;   // 空 VAO，用于全屏三角形(顶点由 gl_VertexID 生成)
 
     void setLightUniforms(Shader& sh);
     void bindBatchTextures(Shader& sh, GpuBatch& gb);
     void buildGrid();
     void renderGrid(const glm::mat4& vp);
+    void renderSky(const OrbitCamera& camera, float aspect);
 };

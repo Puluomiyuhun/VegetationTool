@@ -274,6 +274,12 @@ void TreeGenerator::buildBranches(
         glm::vec3 branchDir = rotateAroundAxis(attachDir, attachRight, el);
         branchDir = rotateAroundAxis(branchDir, attachDir, az);
 
+        // 向下引导：把初始方向朝地面(0,-1,0)偏转，越靠父级底部(attachT越小)偏转越大
+        if (p.downAngle > 0.0f) {
+            float droop = p.downAngle * (1.0f - attachT);
+            branchDir = glm::normalize(glm::mix(branchDir, glm::vec3(0,-1,0), glm::clamp(droop, 0.0f, 1.0f)));
+        }
+
         float thisLen = branchLen * jitterLen(rng);
         // start半径贴合父级附着点，end按自身锥度收缩
         float startR = attachRadius * p.radiusScale;
@@ -344,6 +350,12 @@ void TreeGenerator::buildTwig(
 
         glm::vec3 twigDir = rotateAroundAxis(attachDir, attachRight, el);
         twigDir = rotateAroundAxis(twigDir, attachDir, az);
+
+        // 向下引导：把初始方向朝地面(0,-1,0)偏转，越靠父级底部(t越小)偏转越大
+        if (p.downAngle > 0.0f) {
+            float droop = p.downAngle * (1.0f - t);
+            twigDir = glm::normalize(glm::mix(twigDir, glm::vec3(0,-1,0), glm::clamp(droop, 0.0f, 1.0f)));
+        }
 
         float thisLen = twigLen * jitterLen(rng);
         // start半径贴合父级附着点，end按自身锥度收缩

@@ -74,6 +74,7 @@ void writeNode(std::ostream& o, const TreeNode* n) {
         o << "baseFlare "   << p.baseFlare   << '\n';
         o << "taperPow "    << p.taperPow    << '\n';
         o << "spreadAngle " << p.spreadAngle << '\n';
+        o << "downAngle "   << p.downAngle   << '\n';
         o << "rotateOffset "<< p.rotateOffset<< '\n';
         o << "gravity "     << p.gravity     << '\n';
         o << "regionStart " << p.regionStart << '\n';
@@ -97,6 +98,7 @@ void writeNode(std::ostream& o, const TreeNode* n) {
         o << "baseFlare "   << p.baseFlare   << '\n';
         o << "taperPow "    << p.taperPow    << '\n';
         o << "spreadAngle " << p.spreadAngle << '\n';
+        o << "downAngle "   << p.downAngle   << '\n';
         o << "rotateOffset "<< p.rotateOffset<< '\n';
         o << "gravity "     << p.gravity     << '\n';
         o << "regionStart " << p.regionStart << '\n';
@@ -189,6 +191,7 @@ void applyParams(TreeNode* n, const KV& kv) {
         p.lengthRatio=getF(kv,"lengthRatio",p.lengthRatio); p.radiusScale=getF(kv,"radiusScale",p.radiusScale);
         p.endRatio=getF(kv,"endRatio",p.endRatio); p.baseFlare=getF(kv,"baseFlare",p.baseFlare);
         p.taperPow=getF(kv,"taperPow",p.taperPow); p.spreadAngle=getF(kv,"spreadAngle",p.spreadAngle);
+        p.downAngle=getF(kv,"downAngle",p.downAngle);
         p.rotateOffset=getF(kv,"rotateOffset",p.rotateOffset); p.gravity=getF(kv,"gravity",p.gravity);
         p.regionStart=getF(kv,"regionStart",p.regionStart); p.regionEnd=getF(kv,"regionEnd",p.regionEnd);
         p.noiseAmount=getF(kv,"noiseAmount",p.noiseAmount); p.noiseFreq=getF(kv,"noiseFreq",p.noiseFreq);
@@ -202,6 +205,7 @@ void applyParams(TreeNode* n, const KV& kv) {
         p.lengthRatio=getF(kv,"lengthRatio",p.lengthRatio); p.radiusScale=getF(kv,"radiusScale",p.radiusScale);
         p.endRatio=getF(kv,"endRatio",p.endRatio); p.baseFlare=getF(kv,"baseFlare",p.baseFlare);
         p.taperPow=getF(kv,"taperPow",p.taperPow); p.spreadAngle=getF(kv,"spreadAngle",p.spreadAngle);
+        p.downAngle=getF(kv,"downAngle",p.downAngle);
         p.rotateOffset=getF(kv,"rotateOffset",p.rotateOffset); p.gravity=getF(kv,"gravity",p.gravity);
         p.regionStart=getF(kv,"regionStart",p.regionStart); p.regionEnd=getF(kv,"regionEnd",p.regionEnd);
         p.noiseAmount=getF(kv,"noiseAmount",p.noiseAmount); p.noiseFreq=getF(kv,"noiseFreq",p.noiseFreq);

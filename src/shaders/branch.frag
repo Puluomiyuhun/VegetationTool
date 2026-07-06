@@ -24,6 +24,9 @@ uniform vec3  uLightDir;
 uniform vec3  uLightColor;
 uniform vec3  uAmbientTop;
 uniform vec3  uAmbientBot;
+uniform float uLightIntensity;
+uniform float uAmbientStrength;
+uniform float uExposure;
 
 out vec4 FragColor;
 
@@ -82,7 +85,7 @@ void main()
 
     // 半球环境光
     float hemi   = dot(N, vec3(0,1,0)) * 0.5 + 0.5;
-    vec3  ambient = mix(uAmbientBot, uAmbientTop, hemi) * albedo * uAoStrength;
+    vec3  ambient = mix(uAmbientBot, uAmbientTop, hemi) * albedo * uAoStrength * uAmbientStrength;
 
     // PBR
     vec3 F0 = mix(vec3(0.04), albedo, metallic);
@@ -94,10 +97,11 @@ void main()
     vec3 kD       = (vec3(1.0) - F) * (1.0 - metallic);
     vec3 diffuse  = kD * albedo / PI;
 
-    vec3 Lo    = (diffuse + specular) * uLightColor * NdotL;
+    vec3 Lo    = (diffuse + specular) * uLightColor * uLightIntensity * NdotL;
     vec3 color = ambient + Lo;
 
-    // Reinhard tonemapping + gamma
+    // 曝光 + Reinhard tonemapping + gamma
+    color *= uExposure;
     color = color / (color + vec3(1.0));
     color = pow(color, vec3(1.0/2.2));
 

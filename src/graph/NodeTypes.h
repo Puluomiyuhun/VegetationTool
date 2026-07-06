@@ -44,6 +44,7 @@ struct BranchParams {
     float baseFlare    = 2.2f;   // 枝领裙边外扩倍数(1=无枝领, 越大裙边越宽)
     float taperPow     = 1.5f;   // 锥度曲线幂(1=线性, >1基部饱满/末端尖锐)
     float spreadAngle  = 50.0f;
+    float downAngle    = 0.0f;   // 向下引导强度[0,1]: 枝条初始方向朝地面偏转, 越靠父级底部偏转越大
     float rotateOffset = 137.5f;
     float gravity      = 0.18f;
     float regionStart  = 0.2f;   // 在父级[start,end]区间内生长, 此区间外的枝条剔除
@@ -66,6 +67,7 @@ struct TwigParams {
     float baseFlare    = 1.8f;   // 枝领裙边外扩倍数
     float taperPow     = 1.3f;   // 锥度曲线幂
     float spreadAngle  = 65.0f;
+    float downAngle    = 0.0f;   // 向下引导强度[0,1]: 细枝初始方向朝地面偏转, 越靠父级底部偏转越大
     float rotateOffset = 137.5f;
     float gravity      = 0.25f;
     float regionStart  = 0.2f;   // 在父级[start,end]区间内生长, 此区间外的细枝剔除

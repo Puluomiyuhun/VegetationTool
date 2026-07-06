@@ -7,6 +7,8 @@ void Renderer::init() {
     m_branchShader.loadFromFiles("shaders/branch.vert", "shaders/branch.frag");
     m_leafShader.loadFromFiles("shaders/leaf.vert",     "shaders/leaf.frag");
     m_gridShader.loadFromFiles("shaders/grid.vert",     "shaders/grid.frag");
+    m_skyShader.loadFromFiles("shaders/sky.vert",       "shaders/sky.frag");
+    glGenVertexArrays(1, &m_skyVao);
     buildGrid();
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_CULL_FACE);
@@ -16,6 +18,8 @@ void Renderer::shutdown() {
     m_branchShader.destroy();
     m_leafShader.destroy();
     m_gridShader.destroy();
+    m_skyShader.destroy();
+    if (m_skyVao) { glDeleteVertexArrays(1, &m_skyVao); m_skyVao = 0; }
     for (auto& b : m_batches) {
         b.mesh.destroy();
         b.texBaseColor.destroy();
@@ -69,6 +73,9 @@ void Renderer::setLightUniforms(Shader& sh) {
     sh.setVec3("uLightColor", l.lightColor.x, l.lightColor.y, l.lightColor.z);
     sh.setVec3("uAmbientTop", l.ambientTop.x, l.ambientTop.y, l.ambientTop.z);
     sh.setVec3("uAmbientBot", l.ambientBot.x, l.ambientBot.y, l.ambientBot.z);
+    sh.setFloat("uLightIntensity",  l.lightIntensity);
+    sh.setFloat("uAmbientStrength", l.ambientStrength);
+    sh.setFloat("uExposure",        l.exposure);
 }
 
 void Renderer::bindBatchTextures(Shader& sh, GpuBatch& gb) {
@@ -90,8 +97,10 @@ void Renderer::bindBatchTextures(Shader& sh, GpuBatch& gb) {
 }
 
 void Renderer::render(const OrbitCamera& camera, float aspect, bool wireframe) {
-    glClearColor(0.08f, 0.09f, 0.12f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+    // 先画渐变天空背景(覆盖整个视口，替代纯色 clear)
+    renderSky(camera, aspect);
 
     glm::mat4 view  = camera.viewMatrix();
     glm::mat4 proj  = camera.projectionMatrix(aspect);
@@ -152,6 +161,30 @@ void Renderer::buildGrid() {
 void Renderer::renderGrid(const glm::mat4& vp) {
     m_gridShader.use();
     m_gridShader.setMat4("uViewProjection", glm::value_ptr(vp));
-    m_gridShader.setVec3("uColor", 0.25f, 0.25f, 0.28f);
+    m_gridShader.setVec3("uColor", 0.45f, 0.45f, 0.47f);
     m_gridMesh.draw(GL_LINES);
+}
+
+// 渐变天空：全屏三角形，按视线仰角在天顶/地平线/地面色间插值
+void Renderer::renderSky(const OrbitCamera& camera, float aspect) {
+    glm::mat4 view = camera.viewMatrix();
+    glm::mat4 proj = camera.projectionMatrix(aspect);
+    glm::mat4 invVP = glm::inverse(proj * view);
+    glm::vec3 camPos = camera.position();
+    auto& l = lighting;
+
+    // 天空写在最远处，不写深度，之后的几何体正常覆盖
+    glDisable(GL_DEPTH_TEST);
+    glDepthMask(GL_FALSE);
+    m_skyShader.use();
+    m_skyShader.setMat4("uInvViewProj", glm::value_ptr(invVP));
+    m_skyShader.setVec3("uCamPos",    camPos.x, camPos.y, camPos.z);
+    m_skyShader.setVec3("uSkyTop",     l.skyTop.x,     l.skyTop.y,     l.skyTop.z);
+    m_skyShader.setVec3("uSkyHorizon", l.skyHorizon.x, l.skyHorizon.y, l.skyHorizon.z);
+    m_skyShader.setVec3("uGround",     l.skyGround.x,  l.skyGround.y,  l.skyGround.z);
+    glBindVertexArray(m_skyVao);
+    glDrawArrays(GL_TRIANGLES, 0, 3);
+    glBindVertexArray(0);
+    glDepthMask(GL_TRUE);
+    glEnable(GL_DEPTH_TEST);
 }
