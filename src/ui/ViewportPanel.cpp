@@ -61,6 +61,14 @@ void ViewportPanel::render(Renderer& renderer, OrbitCamera& camera,
     if (ImGui::Begin("##ViewportOverlay", nullptr, flags)) {
         ImGui::Checkbox("Wireframe", &wireframe);
         if (ImGui::Button("Reset Camera")) camera.reset();
+        // 抗锯齿 (MSAA) 采样数
+        const char* aaItems[] = {"Off", "2x", "4x", "8x"};
+        const int   aaSamples[] = {1, 2, 4, 8};
+        int cur = 0;
+        for (int i = 0; i < 4; ++i) if (aaSamples[i] == fb.samples()) cur = i;
+        ImGui::SetNextItemWidth(-1.0f);
+        if (ImGui::Combo("##AA", &cur, aaItems, 4))
+            fb.setSamples(aaSamples[cur]);
     }
     ImGui::End();
 

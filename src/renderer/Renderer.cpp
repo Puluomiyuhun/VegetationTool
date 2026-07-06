@@ -15,6 +15,7 @@ void Renderer::init() {
     buildGrid();
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_CULL_FACE);
+    glEnable(GL_MULTISAMPLE);   // 配合多重采样 FBO 抗锯齿
 }
 
 // 创建深度贴图 FBO：仅深度附件，供光源视角写入
