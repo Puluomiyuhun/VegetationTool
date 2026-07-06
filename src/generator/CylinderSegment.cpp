@@ -60,81 +60,82 @@ std::vector<BranchRing> CylinderSegment::buildCurvedRings(
     return rings;
 }
 
-// ---- 折段弯曲（苍劲老树风格）----
-// 将枝干分成 bendCount+1 段，每段末端做一次硬折弯，
-// 折弯方向随机（偏向侧面/下方），产生苍劲的折角效果。
-std::vector<BranchRing> CylinderSegment::buildKinkedRings(
+// ---- 自然生长环列 ----
+// 沿枝干逐段前进，方向叠加平滑正弦噪声扰动(自然弯曲)与重力下垂，
+// 截面坐标系沿长度渐进螺旋扭转(gnarl)，半径按幂曲线锥化(基部饱满、末端尖锐)。
+std::vector<BranchRing> CylinderSegment::buildNaturalRings(
     glm::vec3 origin, glm::vec3 dir, float length,
     float radiusStart, float radiusEnd,
-    int lengthSegs, int bendCount, float bendAngle,
+    int lengthSegs, float noiseAmount, float noiseFreq,
+    float gnarl, float taperPow, float gravity,
     std::mt19937& rng)
 {
-    if (bendCount <= 0) {
-        // 无折弯：直线
-        glm::vec3 right = perpendicular(dir);
-        std::vector<BranchRing> rings;
-        for (int i = 0; i <= lengthSegs; ++i) {
-            float t = (float)i / (float)lengthSegs;
-            rings.push_back({origin + dir * (length * t),
-                             glm::mix(radiusStart, radiusEnd, t),
-                             dir, right});
-        }
-        return rings;
-    }
+    lengthSegs = std::max(1, lengthSegs);
+    taperPow   = std::max(0.05f, taperPow);
+    float pi2  = glm::two_pi<float>();
 
-    std::uniform_real_distribution<float> angleDist(bendAngle * 0.5f, bendAngle);
-    std::uniform_real_distribution<float> axDist(-1.0f, 1.0f);
+    // 绕任意轴旋转向量(角度制)
+    auto rotate = [](glm::vec3 v, glm::vec3 axis, float deg) {
+        float r = glm::radians(deg), c = std::cos(r), s = std::sin(r);
+        return v*c + glm::cross(axis, v)*s + axis*glm::dot(axis, v)*(1.0f-c);
+    };
 
-    // 每折弯段的环数
-    int totalSeg   = bendCount + 1;
-    int segsPerSeg = std::max(1, lengthSegs / totalSeg);
-    float segLen   = length / (float)totalSeg;
+    // 每根枝条独立的噪声相位，保证不同枝走向各异
+    std::uniform_real_distribution<float> phase(0.0f, pi2);
+    float phA = phase(rng), phB = phase(rng);
 
     std::vector<BranchRing> rings;
+    rings.reserve(lengthSegs + 1);
+
     glm::vec3 curOrigin = origin;
     glm::vec3 curDir    = glm::normalize(dir);
-    glm::vec3 curRight  = perpendicular(curDir);
-    float accumLen = 0.0f;
+    glm::vec3 right      = perpendicular(curDir);
+    float segLen = length / (float)lengthSegs;
 
-    for (int k = 0; k < totalSeg; ++k) {
-        bool isLast = (k == totalSeg - 1);
-        // 最后一段用剩余环数
-        int segs = isLast ? (lengthSegs - k * segsPerSeg) : segsPerSeg;
-        if (segs <= 0) segs = 1;
+    // 起始环
+    {
+        BranchRing r0;
+        r0.center = curOrigin;
+        r0.radius = radiusStart;
+        r0.up     = curDir;
+        r0.right  = right;
+        rings.push_back(r0);
+    }
 
-        for (int i = (k == 0 ? 0 : 1); i <= segs; ++i) {
-            float frac = (float)i / (float)segs;
-            float t = std::clamp((accumLen + segLen * frac) / length, 0.0f, 1.0f);
-            BranchRing ring;
-            ring.center = curOrigin + curDir * (segLen * frac);
-            ring.radius = glm::mix(radiusStart, radiusEnd, t);
-            ring.up     = curDir;
-            ring.right  = curRight;
-            rings.push_back(ring);
-        }
-        accumLen += segLen;
-        curOrigin = rings.back().center;
+    for (int i = 1; i <= lengthSegs; ++i) {
+        float t = (float)i / (float)lengthSegs;
 
-        if (!isLast) {
-            // 折弯：随机侧向轴，带轻微下垂偏向
-            glm::vec3 sideAxis = glm::normalize(
-                glm::vec3(axDist(rng), 0.0f, axDist(rng)));
-            // 混入少量重力方向（让枝干向下弯）
-            glm::vec3 bendAxis = glm::normalize(sideAxis + glm::vec3(0,-0.3f,0));
-            // 保证折弯轴与枝干方向不平行
-            if (std::abs(glm::dot(bendAxis, curDir)) > 0.98f)
-                bendAxis = perpendicular(curDir);
+        // 平滑噪声：两条正交轴上的余弦扰动，除以段数使总弯幅与段数无关
+        float defl1 = (noiseAmount / (float)lengthSegs)
+                    * std::cos(t * noiseFreq * pi2 + phA);
+        float defl2 = (noiseAmount / (float)lengthSegs)
+                    * std::cos(t * noiseFreq * pi2 + phB);
+        glm::vec3 fwd = glm::normalize(glm::cross(curDir, right));
+        glm::vec3 newDir = rotate(curDir, right, defl1);
+        newDir = rotate(newDir, fwd, defl2);
 
-            float angle = angleDist(rng);
-            float rad = glm::radians(angle);
-            float c = std::cos(rad), s = std::sin(rad);
-            glm::vec3 newDir = curDir * c
-                             + glm::cross(bendAxis, curDir) * s
-                             + bendAxis * glm::dot(bendAxis, curDir) * (1.0f - c);
-            newDir = glm::normalize(newDir);
-            curRight = ptfTransport(curRight, curDir, newDir);
-            curDir = newDir;
-        }
+        // 重力：方向逐段向下拉一点(累计幅度约 gravity*0.5)
+        if (gravity > 0.0f)
+            newDir = glm::mix(newDir, glm::vec3(0,-1,0),
+                              gravity * 0.5f / (float)lengthSegs);
+        newDir = glm::normalize(newDir);
+
+        // 平行传输 + 螺旋扭转(gnarl)保持坐标系连续并旋拧
+        right = ptfTransport(right, curDir, newDir);
+        right = rotate(right, newDir, gnarl / (float)lengthSegs);
+        right = glm::normalize(right - newDir * glm::dot(right, newDir));
+
+        curOrigin += newDir * segLen;
+        curDir = newDir;
+
+        // 非线性锥度：radius = mix(start,end, t^taperPow)，>1时基部饱满末端尖
+        float rf = std::pow(t, taperPow);
+        BranchRing ring;
+        ring.center = curOrigin;
+        ring.radius = glm::mix(radiusStart, radiusEnd, rf);
+        ring.up     = curDir;
+        ring.right  = right;
+        rings.push_back(ring);
     }
     return rings;
 }

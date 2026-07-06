@@ -21,13 +21,16 @@ public:
         float radiusStart, float radiusEnd,
         int lengthSegs);
 
-    // 折段弯曲环列（苍劲老树风格）
-    // bendCount: 折弯段数（0=直线）
-    // bendAngle: 每段最大折角（度），越大越苍劲
-    static std::vector<BranchRing> buildKinkedRings(
+    // 自然生长环列：叠加样条噪声扰动 + 螺旋扭曲(gnarl) + 非线性锥度
+    // noiseAmount: 每段方向随机扰动最大角度(度), 让枝干自然弯曲而非笔直
+    // noiseFreq:   扰动频率, 越大方向变化越频繁
+    // gnarl:       沿枝干长度累计的螺旋扭转总角度(度)
+    // taperPow:    锥度曲线幂(1=线性插值, >1基部饱满末端尖锐)
+    static std::vector<BranchRing> buildNaturalRings(
         glm::vec3 origin, glm::vec3 dir, float length,
         float radiusStart, float radiusEnd,
-        int lengthSegs, int bendCount, float bendAngle,
+        int lengthSegs, float noiseAmount, float noiseFreq,
+        float gnarl, float taperPow, float gravity,
         std::mt19937& rng);
 
     static void buildCap(

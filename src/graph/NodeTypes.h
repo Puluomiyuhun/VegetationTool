@@ -23,13 +23,13 @@ struct TrunkParams {
     float length      = 5.0f;
     float startRadius = 0.35f;
     float endRadius   = 0.12f;
-    float taper       = 0.7f;
     float baseFlare   = 1.4f;
-    float curvature   = 0.06f;  // 保留（用于贝塞尔模式）
-    float bendAngle   = 18.0f;  // 折段弯曲：每段最大折角(度)
-    int   bendCount   = 3;      // 折弯段数（0=不弯，越多越苍劲）
+    float noiseAmount = 25.0f;  // 样条噪声扰动强度(度): 让枝干自然扭曲而非笔直
+    float noiseFreq   = 2.5f;   // 噪声频率: 越大扭动越频繁
+    float gnarl       = 15.0f;  // 螺旋扭曲总角度(度): 树皮沿长度旋拧的苍劲感
+    float taperPow    = 1.6f;   // 锥度曲线幂(1=线性, >1基部饱满/末端尖锐)
     int   sides       = 8;
-    int   lengthSegs  = 8;
+    int   lengthSegs  = 10;
     int   seed        = 1;
     float uvTiling    = 3.0f;   // 树皮纹理沿枝干长度的平铺次数
     MaterialParams material = {{0.38f,0.22f,0.10f}, 0.85f, 0.0f, 0.5f, 0.0f};
@@ -40,15 +40,16 @@ struct BranchParams {
     float radiusScale  = 1.0f;   // start半径 = 父级附着点半径 × 此比例(1.0=完全贴合)
     float endRatio     = 0.25f;  // 末端半径 = 自身start半径 × 此比例(锥度)
     float baseFlare    = 2.2f;   // 枝领裙边外扩倍数(1=无枝领, 越大裙边越宽)
-    float curvature    = 0.08f;
+    float taperPow     = 1.5f;   // 锥度曲线幂(1=线性, >1基部饱满/末端尖锐)
     float spreadAngle  = 50.0f;
     float rotateOffset = 137.5f;
     float gravity      = 0.18f;
-    float bendAngle    = 22.0f;  // 折段弯曲最大折角
-    int   bendCount    = 2;      // 折弯段数
+    float noiseAmount  = 30.0f;  // 样条噪声扰动强度(度)
+    float noiseFreq    = 3.0f;   // 噪声频率
+    float gnarl        = 10.0f;  // 螺旋扭曲总角度(度)
     int   branchCount  = 4;
     int   sides        = 6;
-    int   lengthSegs   = 4;
+    int   lengthSegs   = 6;
     int   seed         = 2;
     float uvTiling     = 2.0f;   // 树皮纹理沿枝条长度的平铺次数
     MaterialParams material = {{0.32f,0.18f,0.08f}, 0.88f, 0.0f, 0.55f, 0.0f};
@@ -59,15 +60,16 @@ struct TwigParams {
     float radiusScale  = 1.0f;   // start半径 = 父级附着点半径 × 此比例
     float endRatio     = 0.25f;  // 末端半径 = 自身start半径 × 此比例
     float baseFlare    = 1.8f;   // 枝领裙边外扩倍数
-    float curvature    = 0.12f;
+    float taperPow     = 1.3f;   // 锥度曲线幂
     float spreadAngle  = 65.0f;
     float rotateOffset = 137.5f;
     float gravity      = 0.25f;
-    float bendAngle    = 28.0f;  // 折段弯曲最大折角
-    int   bendCount    = 2;      // 折弯段数
+    float noiseAmount  = 35.0f;  // 样条噪声扰动强度(度)
+    float noiseFreq    = 3.5f;   // 噪声频率
+    float gnarl        = 8.0f;   // 螺旋扭曲总角度(度)
     int   twigCount    = 5;
     int   sides        = 5;
-    int   lengthSegs   = 3;
+    int   lengthSegs   = 5;
     bool  alternating  = true;
     int   seed         = 3;
     float uvTiling     = 1.0f;   // 树皮纹理沿细枝长度的平铺次数

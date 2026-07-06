@@ -223,10 +223,11 @@ std::vector<BranchRing> TreeGenerator::buildTrunk(
     const auto& p = node->params;
     std::mt19937 rng(p.seed);
 
-    auto rings = CylinderSegment::buildKinkedRings(
+    auto rings = CylinderSegment::buildNaturalRings(
         origin, dir, p.length,
         p.startRadius * p.baseFlare, p.endRadius,
-        p.lengthSegs, p.bendCount, p.bendAngle, rng);
+        p.lengthSegs, p.noiseAmount, p.noiseFreq,
+        p.gnarl, p.taperPow, 0.0f, rng);
 
     if (!rings.empty()) rings[0].radius = p.startRadius * p.baseFlare;
 
@@ -263,7 +264,6 @@ void TreeGenerator::buildBranches(
         // 以attachDir为轴向、attachRight为参考，计算分支方向
         glm::vec3 branchDir = rotateAroundAxis(attachDir, attachRight, el);
         branchDir = rotateAroundAxis(branchDir, attachDir, az);
-        branchDir = glm::normalize(glm::mix(branchDir, glm::vec3(0,-1,0), p.gravity*0.25f));
 
         float thisLen = branchLen * jitterLen(rng);
         // start半径贴合父级附着点，end按自身锥度收缩
@@ -276,10 +276,11 @@ void TreeGenerator::buildBranches(
             ? attachPos + glm::normalize(radial) * attachRadius
             : attachPos;
 
-        auto rings = CylinderSegment::buildKinkedRings(
+        auto rings = CylinderSegment::buildNaturalRings(
             surfacePos, branchDir, thisLen,
             startR, endR,
-            p.lengthSegs, p.bendCount, p.bendAngle, rng);
+            p.lengthSegs, p.noiseAmount, p.noiseFreq,
+            p.gnarl, p.taperPow, p.gravity, rng);
 
         auto& batch = getBatch(p.material, false);
         appendCylinder(batch, rings, p.sides, p.uvTiling);
@@ -330,7 +331,6 @@ void TreeGenerator::buildTwig(
 
         glm::vec3 twigDir = rotateAroundAxis(attachDir, attachRight, el);
         twigDir = rotateAroundAxis(twigDir, attachDir, az);
-        twigDir = glm::normalize(glm::mix(twigDir, glm::vec3(0,-1,0), p.gravity*0.25f));
 
         float thisLen = twigLen * jitterLen(rng);
         // start半径贴合父级附着点，end按自身锥度收缩
@@ -343,10 +343,11 @@ void TreeGenerator::buildTwig(
             ? attachPos + glm::normalize(radial) * attachRadius
             : attachPos;
 
-        auto rings = CylinderSegment::buildKinkedRings(
+        auto rings = CylinderSegment::buildNaturalRings(
             surfacePos, twigDir, thisLen,
             startR, endR,
-            p.lengthSegs, p.bendCount, p.bendAngle, rng);
+            p.lengthSegs, p.noiseAmount, p.noiseFreq,
+            p.gnarl, p.taperPow, p.gravity, rng);
 
         auto& batch = getBatch(p.material, false);
         appendCylinder(batch, rings, p.sides, p.uvTiling);

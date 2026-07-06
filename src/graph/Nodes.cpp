@@ -75,12 +75,13 @@ bool TrunkNode::drawProperties() {
         changed |= ImGui::SliderFloat("Length",       &params.length,      1.0f, 15.0f);
         changed |= ImGui::SliderFloat("Start Radius", &params.startRadius, 0.05f, 1.0f);
         changed |= ImGui::SliderFloat("End Radius",   &params.endRadius,   0.01f, 0.5f);
-        changed |= ImGui::SliderFloat("Taper",        &params.taper,       0.3f, 1.0f);
         changed |= ImGui::SliderFloat("Base Flare",   &params.baseFlare,   1.0f, 3.0f);
-        changed |= ImGui::SliderInt  ("Bend Count",   &params.bendCount,   0, 6);
-        changed |= ImGui::SliderFloat("Bend Angle",   &params.bendAngle,   0.0f, 60.0f);
+        changed |= ImGui::SliderFloat("Taper Power",  &params.taperPow,    0.5f, 4.0f);
+        changed |= ImGui::SliderFloat("Noise Amount", &params.noiseAmount, 0.0f, 90.0f);
+        changed |= ImGui::SliderFloat("Noise Freq",   &params.noiseFreq,   0.5f, 8.0f);
+        changed |= ImGui::SliderFloat("Gnarl",        &params.gnarl,       0.0f, 90.0f);
         changed |= ImGui::SliderInt  ("Sides",        &params.sides,       3, 16);
-        changed |= ImGui::SliderInt  ("Length Segs",  &params.lengthSegs,  2, 16);
+        changed |= ImGui::SliderInt  ("Length Segs",  &params.lengthSegs,  2, 24);
         changed |= ImGui::SliderFloat("UV Tiling",    &params.uvTiling,    0.1f, 20.0f);
         changed |= ImGui::SliderInt  ("Seed",         &params.seed,        0, 999);
     }
@@ -109,12 +110,14 @@ bool BranchNode::drawProperties() {
         changed |= ImGui::SliderFloat("Radius Scale",   &params.radiusScale,  0.1f, 2.0f);
         changed |= ImGui::SliderFloat("End Ratio",      &params.endRatio,     0.01f, 1.0f);
         changed |= ImGui::SliderFloat("Base Flare",     &params.baseFlare,    1.0f, 5.0f);
+        changed |= ImGui::SliderFloat("Taper Power",    &params.taperPow,     0.5f, 4.0f);
         changed |= ImGui::SliderFloat("Spread Angle",  &params.spreadAngle,  10.0f, 90.0f);
         changed |= ImGui::SliderFloat("Gravity",       &params.gravity,      0.0f, 1.0f);
-        changed |= ImGui::SliderInt  ("Bend Count",    &params.bendCount,    0, 5);
-        changed |= ImGui::SliderFloat("Bend Angle",    &params.bendAngle,    0.0f, 60.0f);
+        changed |= ImGui::SliderFloat("Noise Amount",   &params.noiseAmount,  0.0f, 90.0f);
+        changed |= ImGui::SliderFloat("Noise Freq",     &params.noiseFreq,    0.5f, 8.0f);
+        changed |= ImGui::SliderFloat("Gnarl",          &params.gnarl,        0.0f, 90.0f);
         changed |= ImGui::SliderInt  ("Sides",         &params.sides,        3, 12);
-        changed |= ImGui::SliderInt  ("Length Segs",   &params.lengthSegs,   2, 8);
+        changed |= ImGui::SliderInt  ("Length Segs",   &params.lengthSegs,   2, 16);
         changed |= ImGui::SliderFloat("UV Tiling",     &params.uvTiling,     0.1f, 20.0f);
     }
     if (ImGui::CollapsingHeader("Material", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -143,12 +146,14 @@ bool TwigNode::drawProperties() {
         changed |= ImGui::SliderFloat("Radius Scale",   &params.radiusScale,  0.1f, 2.0f);
         changed |= ImGui::SliderFloat("End Ratio",      &params.endRatio,     0.01f, 1.0f);
         changed |= ImGui::SliderFloat("Base Flare",     &params.baseFlare,    1.0f, 5.0f);
+        changed |= ImGui::SliderFloat("Taper Power",    &params.taperPow,     0.5f, 4.0f);
         changed |= ImGui::SliderFloat("Spread Angle",  &params.spreadAngle,  10.0f, 90.0f);
         changed |= ImGui::SliderFloat("Gravity",       &params.gravity,      0.0f, 1.0f);
-        changed |= ImGui::SliderInt  ("Bend Count",    &params.bendCount,    0, 5);
-        changed |= ImGui::SliderFloat("Bend Angle",    &params.bendAngle,    0.0f, 60.0f);
+        changed |= ImGui::SliderFloat("Noise Amount",   &params.noiseAmount,  0.0f, 90.0f);
+        changed |= ImGui::SliderFloat("Noise Freq",     &params.noiseFreq,    0.5f, 8.0f);
+        changed |= ImGui::SliderFloat("Gnarl",          &params.gnarl,        0.0f, 90.0f);
         changed |= ImGui::SliderInt  ("Sides",         &params.sides,        3, 8);
-        changed |= ImGui::SliderInt  ("Length Segs",   &params.lengthSegs,   2, 6);
+        changed |= ImGui::SliderInt  ("Length Segs",   &params.lengthSegs,   2, 12);
         changed |= ImGui::SliderFloat("UV Tiling",     &params.uvTiling,     0.1f, 20.0f);
     }
     if (ImGui::CollapsingHeader("Material", ImGuiTreeNodeFlags_DefaultOpen)) {
