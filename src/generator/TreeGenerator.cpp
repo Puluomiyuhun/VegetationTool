@@ -22,13 +22,14 @@ glm::vec3 TreeGenerator::rotateAroundAxis(glm::vec3 v, glm::vec3 axis, float ang
 
 // 按比例 t∈[0,1] 从 rings 中插值位置、切线方向、right轴
 void TreeGenerator::sampleRings(const std::vector<BranchRing>& rings, float t,
-    glm::vec3& outPos, glm::vec3& outDir, glm::vec3& outRight)
+    glm::vec3& outPos, glm::vec3& outDir, glm::vec3& outRight, float& outRadius)
 {
     if (rings.empty()) return;
     if (rings.size() == 1) {
-        outPos   = rings[0].center;
-        outDir   = rings[0].up;
-        outRight = rings[0].right;
+        outPos    = rings[0].center;
+        outDir    = rings[0].up;
+        outRight  = rings[0].right;
+        outRadius = rings[0].radius;
         return;
     }
     t = std::clamp(t, 0.0f, 1.0f);
@@ -37,9 +38,10 @@ void TreeGenerator::sampleRings(const std::vector<BranchRing>& rings, float t,
     int   hi   = std::min(lo + 1, (int)rings.size() - 1);
     float frac = fi - (float)lo;
 
-    outPos   = glm::mix(rings[lo].center, rings[hi].center, frac);
-    outDir   = glm::normalize(glm::mix(rings[lo].up,    rings[hi].up,    frac));
-    outRight = glm::normalize(glm::mix(rings[lo].right, rings[hi].right, frac));
+    outPos    = glm::mix(rings[lo].center, rings[hi].center, frac);
+    outDir    = glm::normalize(glm::mix(rings[lo].up,    rings[hi].up,    frac));
+    outRight  = glm::normalize(glm::mix(rings[lo].right, rings[hi].right, frac));
+    outRadius = glm::mix(rings[lo].radius, rings[hi].radius, frac);
 }
 
 MeshBatch& TreeGenerator::getBatch(const MaterialParams& mat, bool isLeaf) {
@@ -68,6 +70,8 @@ void TreeGenerator::appendCylinder(MeshBatch& batch,
     if (totalLen < 1e-5f) totalLen = 1.0f;
 
     float vAccum = 0.0f;
+    // U 沿圆周方向平铺：为保证接缝无缝，取整数次（至少1次）
+    float uTiling = std::max(1.0f, std::round(uvTiling));
     for (size_t ri = 0; ri + 1 < rings.size(); ++ri) {
         const BranchRing& bot = rings[ri];
         const BranchRing& top = rings[ri+1];
@@ -84,7 +88,7 @@ void TreeGenerator::appendCylinder(MeshBatch& batch,
             float vCoord = (ring == 0) ? vBot : vTop;
             for (int j = 0; j <= sides; ++j) {
                 float angle = (float)j / (float)sides * pi2;
-                float uCoord = (float)j / (float)sides;
+                float uCoord = (float)j / (float)sides * uTiling;
                 glm::vec3 localDir = r.right * std::cos(angle)
                                    + glm::cross(r.up, r.right) * std::sin(angle);
                 glm::vec3 pos    = r.center + localDir * r.radius;
@@ -99,6 +103,74 @@ void TreeGenerator::appendCylinder(MeshBatch& batch,
             uint32_t t0 = base + rv + j, t1 = base + rv + j + 1;
             batch.indices.insert(batch.indices.end(), {b0,b1,t0, b1,t1,t0});
         }
+    }
+}
+
+// 生成枝领裙边：内圈=子枝基部真实一圈，外圈=沿径向外扩后投影到父级表面的一圈。
+// 两圈之间用四边形连成一圈"吸"在父级表面的过渡裙，彻底消除穿模。
+void TreeGenerator::appendCollar(MeshBatch& batch,
+    glm::vec3 parentC, glm::vec3 parentA, float parentR,
+    glm::vec3 childBase, glm::vec3 childDir, glm::vec3 childRight,
+    float startR, float baseFlare, int sides,
+    float uvTiling, float branchTotalLen)
+{
+    if (baseFlare <= 1.0f || parentR <= 1e-5f) return;
+    float pi2 = glm::two_pi<float>();
+    glm::vec3 childUp = glm::normalize(childDir);
+    glm::vec3 fwd     = glm::cross(childUp, childRight);
+
+    // 外圈外扩宽度：限制在父级半径范围内，否则底盘会绕过树干、边缘悬空出头
+    float flareWidth = std::min(startR * (baseFlare - 1.0f), parentR * 0.6f);
+    float outerR     = startR + flareWidth;
+    // childBase 在父级轴上的投影位置，用于把裙边压扁、紧贴附着点
+    float baseAxial  = glm::dot(childBase - parentC, parentA);
+
+    // UV：与枝干本体保持一致，避免接缝处压缩/错位
+    // U 沿圆周取整数次平铺（同 appendCylinder）；
+    // V 按裙边真实物理长度换算，令纹理密度与枝干本体相同(uvTiling/totalLen)
+    float uTiling = std::max(1.0f, std::round(uvTiling));
+    float vPerUnit = (branchTotalLen > 1e-5f) ? uvTiling / branchTotalLen : 0.0f;
+
+    // 先算出外圈顶点位置，用于按内外圈物理间距推出 V
+    uint32_t base = (uint32_t)(batch.vertices.size() / 8);
+    int rv = sides + 1;
+
+    for (int ring = 0; ring < 2; ++ring) {
+        for (int j = 0; j <= sides; ++j) {
+            float angle = (float)j / (float)sides * pi2;
+            glm::vec3 localDir = childRight * std::cos(angle) + fwd * std::sin(angle);
+            glm::vec3 innerPos = childBase + localDir * startR;
+            glm::vec3 pos;
+            float vCoord;
+            if (ring == 0) {
+                // 内圈：子枝基部真实一圈，V=0 与枝干本体基部对齐
+                pos    = innerPos;
+                vCoord = 0.0f;
+            } else {
+                // 外圈：外扩后投影到父级表面，并把轴向位置向附着点收拢(裙边压扁)
+                glm::vec3 flared = childBase + localDir * outerR;
+                glm::vec3 v      = flared - parentC;
+                float     axial  = glm::mix(baseAxial, glm::dot(v, parentA), 0.5f);
+                glm::vec3 radial = v - parentA * glm::dot(v, parentA);
+                float len = glm::length(radial);
+                glm::vec3 rdir = (len > 1e-5f) ? radial / len : localDir;
+                pos = parentC + parentA * axial + rdir * parentR;
+                // 外圈朝枝干基部下方，V 取负，长度按真实间距缩放（不再硬编码 0→1）
+                float collarLen = glm::length(pos - innerPos);
+                vCoord = -collarLen * vPerUnit;
+            }
+            glm::vec3 normal = glm::normalize(localDir);
+            float uCoord = (float)j / (float)sides * uTiling;
+            batch.vertices.insert(batch.vertices.end(),
+                {pos.x,pos.y,pos.z, normal.x,normal.y,normal.z,
+                 uCoord, vCoord});
+        }
+    }
+    for (int j = 0; j < sides; ++j) {
+        uint32_t i0 = base + j,      i1 = base + j + 1;
+        uint32_t o0 = base + rv + j, o1 = base + rv + j + 1;
+        // 外圈在父级表面、内圈在子枝基部，缠成裙边（双面朝外）
+        batch.indices.insert(batch.indices.end(), {i0,o0,i1, i1,o0,o1});
     }
 }
 
@@ -182,7 +254,8 @@ void TreeGenerator::buildBranches(
             : 0.6f;
 
         glm::vec3 attachPos, attachDir, attachRight;
-        sampleRings(parentRings, attachT, attachPos, attachDir, attachRight);
+        float     attachRadius = p.radiusScale;
+        sampleRings(parentRings, attachT, attachPos, attachDir, attachRight, attachRadius);
 
         float az = i * p.rotateOffset + jitter(rng);
         float el = p.spreadAngle + jitter(rng);
@@ -193,17 +266,31 @@ void TreeGenerator::buildBranches(
         branchDir = glm::normalize(glm::mix(branchDir, glm::vec3(0,-1,0), p.gravity*0.25f));
 
         float thisLen = branchLen * jitterLen(rng);
+        // start半径贴合父级附着点，end按自身锥度收缩
+        float startR = attachRadius * p.radiusScale;
+        float endR   = startR * p.endRatio;
+
+        // 枝条从父级“表面”发出（轴心 + 径向×父半径），而非从轴心穿出
+        glm::vec3 radial = branchDir - attachDir * glm::dot(branchDir, attachDir);
+        glm::vec3 surfacePos = (glm::length(radial) > 1e-4f)
+            ? attachPos + glm::normalize(radial) * attachRadius
+            : attachPos;
 
         auto rings = CylinderSegment::buildKinkedRings(
-            attachPos, branchDir, thisLen,
-            p.startRadius, p.endRadius,
+            surfacePos, branchDir, thisLen,
+            startR, endR,
             p.lengthSegs, p.bendCount, p.bendAngle, rng);
 
         auto& batch = getBatch(p.material, false);
         appendCylinder(batch, rings, p.sides, p.uvTiling);
+        // 枝领：把基部一圈投影到父级表面，形成贴合过渡裙
+        if (!rings.empty())
+            appendCollar(batch, attachPos, attachDir, attachRadius,
+                         rings.front().center, rings.front().up, rings.front().right,
+                         startR, p.baseFlare, p.sides, p.uvTiling, thisLen);
 
         // 子节点从branch末端（折弯后的真实末端）出发
-        glm::vec3 tip      = rings.empty() ? attachPos + branchDir * thisLen : rings.back().center;
+        glm::vec3 tip      = rings.empty() ? surfacePos + branchDir * thisLen : rings.back().center;
         glm::vec3 tipDir   = rings.empty() ? branchDir : rings.back().up;
 
         for (auto* child : graph.childrenOf(node->id)) {
@@ -238,23 +325,38 @@ void TreeGenerator::buildTwig(
 
         float t = attachDist(rng);
         glm::vec3 attachPos, attachDir, attachRight;
-        sampleRings(parentRings, t, attachPos, attachDir, attachRight);
+        float     attachRadius = p.radiusScale;
+        sampleRings(parentRings, t, attachPos, attachDir, attachRight, attachRadius);
 
         glm::vec3 twigDir = rotateAroundAxis(attachDir, attachRight, el);
         twigDir = rotateAroundAxis(twigDir, attachDir, az);
         twigDir = glm::normalize(glm::mix(twigDir, glm::vec3(0,-1,0), p.gravity*0.25f));
 
         float thisLen = twigLen * jitterLen(rng);
+        // start半径贴合父级附着点，end按自身锥度收缩
+        float startR = attachRadius * p.radiusScale;
+        float endR   = startR * p.endRatio;
+
+        // 细枝从父级“表面”发出，而非从轴心穿出
+        glm::vec3 radial = twigDir - attachDir * glm::dot(twigDir, attachDir);
+        glm::vec3 surfacePos = (glm::length(radial) > 1e-4f)
+            ? attachPos + glm::normalize(radial) * attachRadius
+            : attachPos;
 
         auto rings = CylinderSegment::buildKinkedRings(
-            attachPos, twigDir, thisLen,
-            p.startRadius, p.endRadius,
+            surfacePos, twigDir, thisLen,
+            startR, endR,
             p.lengthSegs, p.bendCount, p.bendAngle, rng);
 
         auto& batch = getBatch(p.material, false);
         appendCylinder(batch, rings, p.sides, p.uvTiling);
+        // 枝领：把基部一圈投影到父级表面，形成贴合过渡裙
+        if (!rings.empty())
+            appendCollar(batch, attachPos, attachDir, attachRadius,
+                         rings.front().center, rings.front().up, rings.front().right,
+                         startR, p.baseFlare, p.sides, p.uvTiling, thisLen);
 
-        glm::vec3 tip    = rings.empty() ? attachPos + twigDir * thisLen : rings.back().center;
+        glm::vec3 tip    = rings.empty() ? surfacePos + twigDir * thisLen : rings.back().center;
         glm::vec3 tipDir = rings.empty() ? twigDir : rings.back().up;
 
         for (auto* child : graph.childrenOf(node->id)) {

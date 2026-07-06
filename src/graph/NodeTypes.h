@@ -37,8 +37,9 @@ struct TrunkParams {
 
 struct BranchParams {
     float lengthRatio  = 0.55f;
-    float startRadius  = 0.08f;
-    float endRadius    = 0.02f;
+    float radiusScale  = 1.0f;   // start半径 = 父级附着点半径 × 此比例(1.0=完全贴合)
+    float endRatio     = 0.25f;  // 末端半径 = 自身start半径 × 此比例(锥度)
+    float baseFlare    = 2.2f;   // 枝领裙边外扩倍数(1=无枝领, 越大裙边越宽)
     float curvature    = 0.08f;
     float spreadAngle  = 50.0f;
     float rotateOffset = 137.5f;
@@ -55,8 +56,9 @@ struct BranchParams {
 
 struct TwigParams {
     float lengthRatio  = 0.4f;
-    float startRadius  = 0.025f;
-    float endRadius    = 0.006f;
+    float radiusScale  = 1.0f;   // start半径 = 父级附着点半径 × 此比例
+    float endRatio     = 0.25f;  // 末端半径 = 自身start半径 × 此比例
+    float baseFlare    = 1.8f;   // 枝领裙边外扩倍数
     float curvature    = 0.12f;
     float spreadAngle  = 65.0f;
     float rotateOffset = 137.5f;

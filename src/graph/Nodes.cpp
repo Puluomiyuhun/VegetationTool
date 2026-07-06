@@ -106,8 +106,9 @@ bool BranchNode::drawProperties() {
     // Spine：单根枝条形态 —— 长度、粗细、下垂、弯曲
     if (ImGui::CollapsingHeader("Spine", ImGuiTreeNodeFlags_DefaultOpen)) {
         changed |= ImGui::SliderFloat("Length Ratio",  &params.lengthRatio,  0.1f, 1.0f);
-        changed |= ImGui::SliderFloat("Start Radius",  &params.startRadius,  0.01f, 0.3f);
-        changed |= ImGui::SliderFloat("End Radius",    &params.endRadius,    0.002f, 0.1f);
+        changed |= ImGui::SliderFloat("Radius Scale",   &params.radiusScale,  0.1f, 2.0f);
+        changed |= ImGui::SliderFloat("End Ratio",      &params.endRatio,     0.01f, 1.0f);
+        changed |= ImGui::SliderFloat("Base Flare",     &params.baseFlare,    1.0f, 5.0f);
         changed |= ImGui::SliderFloat("Spread Angle",  &params.spreadAngle,  10.0f, 90.0f);
         changed |= ImGui::SliderFloat("Gravity",       &params.gravity,      0.0f, 1.0f);
         changed |= ImGui::SliderInt  ("Bend Count",    &params.bendCount,    0, 5);
@@ -139,8 +140,9 @@ bool TwigNode::drawProperties() {
     // Spine：单根细枝形态
     if (ImGui::CollapsingHeader("Spine", ImGuiTreeNodeFlags_DefaultOpen)) {
         changed |= ImGui::SliderFloat("Length Ratio",  &params.lengthRatio,  0.1f, 1.0f);
-        changed |= ImGui::SliderFloat("Start Radius",  &params.startRadius,  0.005f, 0.1f);
-        changed |= ImGui::SliderFloat("End Radius",    &params.endRadius,    0.001f, 0.05f);
+        changed |= ImGui::SliderFloat("Radius Scale",   &params.radiusScale,  0.1f, 2.0f);
+        changed |= ImGui::SliderFloat("End Ratio",      &params.endRatio,     0.01f, 1.0f);
+        changed |= ImGui::SliderFloat("Base Flare",     &params.baseFlare,    1.0f, 5.0f);
         changed |= ImGui::SliderFloat("Spread Angle",  &params.spreadAngle,  10.0f, 90.0f);
         changed |= ImGui::SliderFloat("Gravity",       &params.gravity,      0.0f, 1.0f);
         changed |= ImGui::SliderInt  ("Bend Count",    &params.bendCount,    0, 5);
