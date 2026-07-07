@@ -23,10 +23,14 @@ struct MeshBatch {
 
 struct TreeMeshData {
     std::vector<MeshBatch> batches;
-    // 高亮几何(仅位置, 3 floats/顶点): 选中节点及其子树的三角网, 用于视口黄色线框叠加。
+    // 高亮几何(pos(3)+normal(3), 6 floats/顶点): 选中节点"自身"的三角网,
+    // 用于视口描边(沿法线外扩 + 模板缓冲勾勒轮廓)。
     std::vector<float>    hlVerts;
     std::vector<uint32_t> hlIdx;
-    void clear() { batches.clear(); hlVerts.clear(); hlIdx.clear(); }
+    // 拾取三角形: 每个三角形记录三个世界坐标顶点 + 所属节点 id, 供鼠标射线拾取。
+    struct PickTri { glm::vec3 a, b, c; uint32_t node; };
+    std::vector<PickTri>  pickTris;
+    void clear() { batches.clear(); hlVerts.clear(); hlIdx.clear(); pickTris.clear(); }
 };
 
 struct LightingParams {
@@ -59,6 +63,10 @@ public:
     void uploadTreeMesh(const TreeMeshData& data);
     void render(const OrbitCamera& camera, float aspect, bool wireframe);
 
+    // 屏幕拾取: ndc∈[-1,1] 的鼠标坐标, 返回命中三角形所属节点 id(未命中=INVALID_NODE)。
+    uint32_t pickNode(const OrbitCamera& camera, float aspect,
+                      float ndcX, float ndcY) const;
+
     LightingParams lighting;
 
 private:
@@ -84,10 +92,12 @@ private:
     Shader m_skyShader;
     Shader m_depthShader;   // 阴影深度 pass
     Shader m_groundShader;  // 地面(接收投影)
+    Shader m_outlineShader; // 选中描边(沿法线外扩纯色)
     Mesh   m_gridMesh;
     Mesh   m_groundMesh;    // 地面平面
-    Mesh   m_hlMesh;        // 选中节点高亮线框(仅位置)
+    Mesh   m_hlMesh;        // 选中节点高亮描边(pos+normal)
     int    m_hlIndexCount = 0;
+    std::vector<TreeMeshData::PickTri> m_pickTris;  // 鼠标射线拾取用的三角形
     GLuint m_skyVao = 0;   // 空 VAO，用于全屏三角形(顶点由 gl_VertexID 生成)
 
     // ---- 阴影贴图 ----

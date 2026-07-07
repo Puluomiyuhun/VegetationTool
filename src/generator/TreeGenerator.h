@@ -14,8 +14,14 @@ public:
 private:
     TreeMeshData* m_out = nullptr;
     NodeId        m_hlNode = INVALID_NODE;   // 被选中的高亮节点
+    bool          m_hlCapture = false;       // 当前是否正在生成被选中节点"自身"的几何
+    NodeId        m_curNode = INVALID_NODE;  // 当前正在生成几何的节点(供拾取三角标记归属)
 
     MeshBatch& getBatch(const MaterialParams& mat, bool isLeaf);
+
+    // 每次向 batch 追加几何后调用: 把 [iFrom,end) 的三角登记到拾取表(附带 m_curNode);
+    // 若 m_hlCapture 为真, 再把 [vFrom,end) 顶点(pos+normal)镜像到高亮描边缓冲。
+    void afterAppend(const MeshBatch& batch, size_t vFrom, size_t iFrom);
 
     // parentRings: 父节点的环列，Branch/Twig 从中取附着点
     void processNode(

@@ -269,7 +269,7 @@ void UIManager::render(NodeGraph& graph, NodeId& selectedNodeId,
     ImGui::End();
 
     // Viewport
-    m_viewport.render(renderer, camera, fb, wireframe);
+    m_viewport.render(renderer, camera, fb, wireframe, selectedNodeId);
 }
 
 void UIManager::endFrame() {

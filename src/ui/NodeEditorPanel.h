@@ -34,6 +34,9 @@ private:
     std::vector<NodeId> pasteClipboard(NodeGraph& graph, glm::vec2 offset);
 
     bool m_firstFrame = true;
+    // 上一帧对外报告的选中节点: 用于检测外部(视口拾取)改动 selectedNodeId, 从而把
+    // 选中同步进 node-editor(否则编辑器每帧用自己的选中覆盖掉视口拾取结果)。
+    NodeId m_lastReportedSel = INVALID_NODE;
     // 粘贴后需要在下一帧重新定位/选中的新节点
     std::vector<NodeId> m_pastePendingSelect;
     // 已被 node-editor 定位过的节点集合：新节点(不在此集合)先按 editorPos 定位，

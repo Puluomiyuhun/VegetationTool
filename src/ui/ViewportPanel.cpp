@@ -1,9 +1,10 @@
 #include "ViewportPanel.h"
 #include <imgui.h>
 #include <glad/glad.h>
+#include <cmath>
 
 void ViewportPanel::render(Renderer& renderer, OrbitCamera& camera,
-                            Framebuffer& fb, bool& wireframe)
+                            Framebuffer& fb, bool& wireframe, NodeId& selectedNodeId)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0,0));
     ImGui::Begin("Viewport");
@@ -46,6 +47,24 @@ void ViewportPanel::render(Renderer& renderer, OrbitCamera& camera,
         if (io.MouseDown[0])  camera.onMouseDrag(dx, dy);
         if (io.MouseDown[2])  camera.onMiddleDrag(dx, dy);
         if (io.MouseWheel != 0) camera.onScroll(io.MouseWheel);
+    }
+
+    // 左键单击拾取: 按下-抬起位移很小才算点击(与拖动旋转区分)。
+    // 命中模型→选中对应节点并高亮; 点击空白→取消选中。
+    if (hovered && ImGui::IsMouseReleased(ImGuiMouseButton_Left)) {
+        ImVec2 dragTotal = ImGui::GetMouseDragDelta(ImGuiMouseButton_Left, 0.0f);
+        if (std::abs(dragTotal.x) < 3.0f && std::abs(dragTotal.y) < 3.0f) {
+            ImVec2 rmin = ImGui::GetItemRectMin();
+            ImVec2 mp   = ImGui::GetMousePos();
+            float lx = mp.x - rmin.x;
+            float ly = mp.y - rmin.y;
+            if (size.x > 0 && size.y > 0) {
+                // 屏幕坐标→NDC。图像上下翻转显示, 顶部对应 NDC +1。
+                float ndcX = (lx / size.x) * 2.0f - 1.0f;
+                float ndcY = 1.0f - (ly / size.y) * 2.0f;
+                selectedNodeId = renderer.pickNode(camera, aspect, ndcX, ndcY);
+            }
+        }
     }
 
     // 工具栏（左上角overlay）

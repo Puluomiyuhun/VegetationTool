@@ -11,6 +11,7 @@ void Renderer::init() {
     m_skyShader.loadFromFiles("shaders/sky.vert",       "shaders/sky.frag");
     m_depthShader.loadFromFiles("shaders/depth.vert",   "shaders/depth.frag");
     m_groundShader.loadFromFiles("shaders/ground.vert", "shaders/ground.frag");
+    m_outlineShader.loadFromFiles("shaders/outline.vert", "shaders/outline.frag");
     glGenVertexArrays(1, &m_skyVao);
     initShadowMap();
     buildGrid();
@@ -51,6 +52,7 @@ void Renderer::shutdown() {
     m_skyShader.destroy();
     m_depthShader.destroy();
     m_groundShader.destroy();
+    m_outlineShader.destroy();
     if (m_skyVao) { glDeleteVertexArrays(1, &m_skyVao); m_skyVao = 0; }
     if (m_shadowFbo) { glDeleteFramebuffers(1, &m_shadowFbo); m_shadowFbo = 0; }
     if (m_shadowTex) { glDeleteTextures(1, &m_shadowTex); m_shadowTex = 0; }
@@ -103,13 +105,16 @@ void Renderer::uploadTreeMesh(const TreeMeshData& data) {
         m_batches.push_back(std::move(gb));
     }
 
-    // 高亮线框网格(选中节点子树): 仅位置, 用 grid shader 以黄色线框叠加渲染
+    // 高亮描边网格(选中节点自身): pos+normal, 用 outline shader 沿法线外扩勾勒轮廓
     m_hlMesh.destroy();
     m_hlIndexCount = 0;
     if (!data.hlVerts.empty() && !data.hlIdx.empty()) {
-        m_hlMesh.create(data.hlVerts, data.hlIdx, {3});
+        m_hlMesh.create(data.hlVerts, data.hlIdx, {3, 3});
         m_hlIndexCount = (int)data.hlIdx.size();
     }
+
+    // 拾取三角(世界坐标 + 节点归属): 供鼠标射线拾取
+    m_pickTris = data.pickTris;
 
     computeSceneBounds(data);
 }
@@ -293,20 +298,76 @@ void Renderer::render(const OrbitCamera& camera, float aspect, bool wireframe) {
     renderHighlight(vp);
 }
 
-// 选中节点及其子树的黄色线框叠加(类 SpeedTree 选中高亮)。
-// 复用 grid shader(仅位置+uViewProjection+uColor), 以线框模式绘制, 关闭深度测试浮于模型上。
+// 选中节点自身的轮廓描边(类 SpeedTree 选中效果)。用模板缓冲勾勒外轮廓而非线框:
+// Pass A 把实心网格写入模板=1(不写颜色); Pass B 沿法线外扩一圈只在模板≠1 处上色,
+// 于是只剩一圈外描边, 不显示内部拓扑。关闭深度测试, 让描边浮于模型之上。
 void Renderer::renderHighlight(const glm::mat4& vp) {
     if (!m_hlMesh.valid() || m_hlIndexCount == 0) return;
+
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_CULL_FACE);
-    glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-    m_gridShader.use();
-    m_gridShader.setMat4("uViewProjection", glm::value_ptr(vp));
-    m_gridShader.setVec3("uColor", 1.0f, 0.9f, 0.05f);   // 明黄色
-    m_hlMesh.draw();
     glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+    glEnable(GL_STENCIL_TEST);
+    glStencilMask(0xFF);
+    glClear(GL_STENCIL_BUFFER_BIT);
+    m_outlineShader.use();
+    m_outlineShader.setMat4("uViewProjection", glm::value_ptr(vp));
+
+    // Pass A: 实心网格 → 模板=1, 不写颜色
+    glStencilFunc(GL_ALWAYS, 1, 0xFF);
+    glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
+    glStencilMask(0xFF);
+    glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
+    m_outlineShader.setFloat("uOutlineWidth", 0.0f);
+    m_outlineShader.setVec3("uColor", 1.0f, 0.9f, 0.05f);
+    m_hlMesh.draw();
+
+    // Pass B: 沿法线外扩 → 只在模板≠1(即轮廓外圈)处上色
+    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+    glStencilFunc(GL_NOTEQUAL, 1, 0xFF);
+    glStencilMask(0x00);
+    // 外扩宽度按场景尺度取一个小比例, 保证不同大小的树描边粗细相近
+    float scale = glm::length(m_sceneMax - m_sceneMin);
+    m_outlineShader.setFloat("uOutlineWidth", scale * 0.0016f + 0.004f);
+    m_outlineShader.setVec3("uColor", 1.0f, 0.9f, 0.05f);
+    m_hlMesh.draw();
+
+    glStencilMask(0xFF);
+    glDisable(GL_STENCIL_TEST);
     glEnable(GL_CULL_FACE);
     glEnable(GL_DEPTH_TEST);
+}
+
+// 鼠标射线拾取: 把 NDC 反投影成世界射线, 与所有拾取三角求最近交点, 返回其节点 id。
+uint32_t Renderer::pickNode(const OrbitCamera& camera, float aspect,
+                            float ndcX, float ndcY) const {
+    if (m_pickTris.empty()) return 0;
+    glm::mat4 invVP = glm::inverse(camera.projectionMatrix(aspect) * camera.viewMatrix());
+    glm::vec4 pNear = invVP * glm::vec4(ndcX, ndcY, -1.0f, 1.0f);
+    glm::vec4 pFar  = invVP * glm::vec4(ndcX, ndcY,  1.0f, 1.0f);
+    glm::vec3 ro = glm::vec3(pNear) / pNear.w;
+    glm::vec3 rd = glm::normalize(glm::vec3(pFar) / pFar.w - ro);
+
+    // Möller–Trumbore 射线-三角相交, 取最近命中
+    float best = 1e30f;
+    uint32_t hit = 0;
+    const float EPS = 1e-7f;
+    for (const auto& t : m_pickTris) {
+        glm::vec3 e1 = t.b - t.a, e2 = t.c - t.a;
+        glm::vec3 pv = glm::cross(rd, e2);
+        float det = glm::dot(e1, pv);
+        if (std::abs(det) < EPS) continue;   // 平行(双面: 不剔除背面)
+        float inv = 1.0f / det;
+        glm::vec3 tv = ro - t.a;
+        float u = glm::dot(tv, pv) * inv;
+        if (u < 0.0f || u > 1.0f) continue;
+        glm::vec3 qv = glm::cross(tv, e1);
+        float v = glm::dot(rd, qv) * inv;
+        if (v < 0.0f || u + v > 1.0f) continue;
+        float dist = glm::dot(e2, qv) * inv;
+        if (dist > 1e-4f && dist < best) { best = dist; hit = t.node; }
+    }
+    return hit;
 }
 
 void Renderer::buildGrid() {

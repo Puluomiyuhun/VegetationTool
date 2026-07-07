@@ -118,9 +118,17 @@ void NodeEditorPanel::render(NodeGraph& graph, NodeId& selectedNodeId) {
     ned::EndDelete();
 
     // 选中检测
+    // 若外部(视口拾取)改动了 selectedNodeId(与上一帧对外报告值不同), 先把该选中同步进
+    // node-editor, 否则下面读回编辑器选中会把视口拾取结果覆盖掉。
+    if (selectedNodeId != m_lastReportedSel) {
+        ned::ClearSelection();
+        if (selectedNodeId != INVALID_NODE)
+            ned::SelectNode((ned::NodeId)selectedNodeId, false);
+    }
     std::vector<ned::NodeId> sel(ned::GetSelectedObjectCount());
     int count = ned::GetSelectedNodes(sel.data(), (int)sel.size());
     selectedNodeId = (count > 0) ? (NodeId)sel[0].Get() : INVALID_NODE;
+    m_lastReportedSel = selectedNodeId;
 
     // 上一帧粘贴出的新节点：本帧摆位并选中。
     if (!m_pastePendingSelect.empty()) {

@@ -248,15 +248,15 @@ void TreeGenerator::processNode(
 {
     if (!node || depth > MAX_DEPTH) return;
 
-    // 若本节点是被选中的高亮节点: 记录进入前各 batch 的大小, 处理完(含整个子树)后
-    // 把新增的三角网位置镜像到高亮缓冲, 供视口画黄色线框。
+    // 高亮描边 + 拾取: 进入本节点时把 m_curNode 指向自身(供 afterAppend 登记拾取三角
+    // 归属), 并按 isHl 置 m_hlCapture。子节点递归发生在各 build 函数内部, 会用自己的值
+    // 覆盖这两个字段, 返回后恢复, 从而保证描边只含"当前节点这一层"的几何, 而拾取三角
+    // 覆盖全部节点(每个节点标记自己那部分)。登记动作在各 append 处调用 afterAppend。
     bool isHl = (m_hlNode != INVALID_NODE && node->id == m_hlNode);
-    std::vector<size_t> vSnap, iSnap;
-    if (isHl) {
-        vSnap.reserve(m_out->batches.size());
-        iSnap.reserve(m_out->batches.size());
-        for (auto& b : m_out->batches) { vSnap.push_back(b.vertices.size()); iSnap.push_back(b.indices.size()); }
-    }
+    bool prevCapture = m_hlCapture;
+    NodeId prevNode = m_curNode;
+    m_hlCapture = isHl;
+    m_curNode = node->id;
 
     switch (node->getType()) {
     case NodeType::Trunk: {
@@ -293,23 +293,36 @@ void TreeGenerator::processNode(
         break;
     }
 
-    if (isHl) {
-        for (size_t bi = 0; bi < m_out->batches.size(); ++bi) {
-            auto& b = m_out->batches[bi];
-            int stride = b.isLeaf ? 11 : 8;
-            size_t vFrom = (bi < vSnap.size()) ? vSnap[bi] : 0;  // 处理前的顶点 float 数
-            size_t iFrom = (bi < iSnap.size()) ? iSnap[bi] : 0;
-            size_t localVBase = vFrom / stride;                  // 处理前该 batch 的顶点数
-            uint32_t hlBase = (uint32_t)(m_out->hlVerts.size() / 3);
-            for (size_t v = vFrom; v + 2 < b.vertices.size(); v += stride) {
-                m_out->hlVerts.push_back(b.vertices[v]);
-                m_out->hlVerts.push_back(b.vertices[v+1]);
-                m_out->hlVerts.push_back(b.vertices[v+2]);
-            }
-            for (size_t k = iFrom; k < b.indices.size(); ++k)
-                m_out->hlIdx.push_back(hlBase + (b.indices[k] - (uint32_t)localVBase));
-        }
+    m_hlCapture = prevCapture;
+    m_curNode = prevNode;
+}
+
+// 每次向 batch 追加几何后调用: (1) 把 [iFrom,end) 的三角(取自 [vFrom,end) 顶点前3个
+// float 的世界坐标)登记到拾取表, 归属 m_curNode; (2) 若 m_hlCapture 为真, 把这些顶点的
+// pos(3)+normal(3)镜像进描边缓冲(hlVerts/hlIdx)供轮廓渲染。
+void TreeGenerator::afterAppend(const MeshBatch& batch, size_t vFrom, size_t iFrom) {
+    int stride = batch.isLeaf ? 11 : 8;
+    size_t localVBase = vFrom / stride;
+
+    // (1) 拾取三角: 遍历新增索引三个一组, 取世界坐标顶点
+    auto vpos = [&](uint32_t vi) {
+        size_t o = (size_t)vi * stride;
+        return glm::vec3(batch.vertices[o], batch.vertices[o+1], batch.vertices[o+2]);
+    };
+    for (size_t k = iFrom; k + 2 < batch.indices.size(); k += 3) {
+        m_out->pickTris.push_back({
+            vpos(batch.indices[k]), vpos(batch.indices[k+1]), vpos(batch.indices[k+2]),
+            m_curNode });
     }
+
+    // (2) 描边几何: pos+normal, 重映射索引到描边缓冲
+    if (!m_hlCapture) return;
+    uint32_t hlBase = (uint32_t)(m_out->hlVerts.size() / 6);
+    for (size_t v = vFrom; v + 5 < batch.vertices.size(); v += stride) {
+        for (int j = 0; j < 6; ++j) m_out->hlVerts.push_back(batch.vertices[v+j]);
+    }
+    for (size_t k = iFrom; k < batch.indices.size(); ++k)
+        m_out->hlIdx.push_back(hlBase + (batch.indices[k] - (uint32_t)localVBase));
 }
 
 // ---- Trunk ----
@@ -342,7 +355,9 @@ std::vector<BranchRing> TreeGenerator::buildTrunk(
     }
 
     auto& batch = getBatch(p.material, false);
+    size_t hlV = batch.vertices.size(), hlI = batch.indices.size();
     appendCylinder(batch, rings, p.sides, p.uvTilingU, p.uvTilingV);
+    afterAppend(batch, hlV, hlI);
     return rings;
 }
 
@@ -423,12 +438,14 @@ void TreeGenerator::buildBranches(
             p.jointCount, p.jointBulge);
 
         auto& batch = getBatch(p.material, false);
+        size_t hlV = batch.vertices.size(), hlI = batch.indices.size();
         appendCylinder(batch, rings, p.sides, p.uvTilingU, p.uvTilingV);
         // 枝领：把基部一圈投影到父级表面，形成贴合过渡裙
         if (!rings.empty())
             appendCollar(batch, attachPos, attachDir, attachRadius,
                          rings.front().center, rings.front().up, rings.front().right,
                          startR, p.baseFlare, p.sides, p.uvTilingU, p.uvTilingV, thisLen);
+        afterAppend(batch, hlV, hlI);
 
         // 子节点从branch末端（折弯后的真实末端）出发
         glm::vec3 tip      = rings.empty() ? surfacePos + branchDir * thisLen : rings.back().center;
@@ -494,12 +511,14 @@ void TreeGenerator::buildTwig(
             p.gnarl, p.taperPow, p.gravity, rng);
 
         auto& batch = getBatch(p.material, false);
+        size_t hlV = batch.vertices.size(), hlI = batch.indices.size();
         appendCylinder(batch, rings, p.sides, p.uvTilingU, p.uvTilingV);
         // 枝领：把基部一圈投影到父级表面，形成贴合过渡裙
         if (!rings.empty())
             appendCollar(batch, attachPos, attachDir, attachRadius,
                          rings.front().center, rings.front().up, rings.front().right,
                          startR, p.baseFlare, p.sides, p.uvTilingU, p.uvTilingV, thisLen);
+        afterAppend(batch, hlV, hlI);
 
         glm::vec3 tip    = rings.empty() ? surfacePos + twigDir * thisLen : rings.back().center;
         glm::vec3 tipDir = rings.empty() ? twigDir : rings.back().up;
@@ -564,6 +583,7 @@ void TreeGenerator::buildRoots(
             p.gnarl, p.taperPow, p.gravity, rng,
             p.jointCount, p.jointBulge);
 
+        size_t hlV = batch.vertices.size(), hlI = batch.indices.size();
         appendCylinder(batch, rings, p.sides, p.uvTilingU, p.uvTilingV);
         // 根领：接壤处裙边贴合树干表面(传入树干rings→落点半径随树干高度真实起伏)
         if (!rings.empty())
@@ -571,6 +591,7 @@ void TreeGenerator::buildRoots(
                          rings.front().center, rings.front().up, rings.front().right,
                          startR, p.baseFlare, p.sides, p.uvTilingU, p.uvTilingV, thisLen,
                          &parentRings, p.collarSink);
+        afterAppend(batch, hlV, hlI);
     }
 }
 
@@ -660,6 +681,7 @@ void TreeGenerator::buildLeafCluster(
             {pos - leafRight*hw + leafUp*hs, 0.f, 1.f},
         };
         // 每顶点: pos(3)+normal(3)+uv(2)+albedo(3) = 11 floats
+        size_t hlV = batch.vertices.size(), hlI = batch.indices.size();
         uint32_t base = (uint32_t)(batch.vertices.size() / 11);
         for (auto& lvi : lv) {
             batch.vertices.insert(batch.vertices.end(),
@@ -670,6 +692,7 @@ void TreeGenerator::buildLeafCluster(
         }
         batch.indices.insert(batch.indices.end(),
             {base,base+1,base+2, base,base+2,base+3});
+        afterAppend(batch, hlV, hlI);
     }
 }
 
@@ -722,8 +745,9 @@ void TreeGenerator::buildSpine(
             p.gnarl, p.taperPow, p.gravity, rng);
 
         auto& batch = getBatch(p.material, false);
+        size_t hlV = batch.vertices.size(), hlI = batch.indices.size();
         appendCylinder(batch, rings, p.sides, p.uvTilingU, p.uvTilingV);
-
+        afterAppend(batch, hlV, hlI);
         // Frond 子节点沿整条叶轴 rings 铺叶带
         glm::vec3 tip    = rings.empty() ? surfacePos + spineDir * thisLen : rings.back().center;
         glm::vec3 tipDir = rings.empty() ? spineDir : rings.back().up;
@@ -745,6 +769,7 @@ void TreeGenerator::buildFrond(
     const auto& p = node->params;
     const auto& rings = *parentRings;
     auto& batch = getBatch(p.material, true);
+    size_t hlV = batch.vertices.size(), hlI = batch.indices.size();
     glm::vec3 col = p.material.albedo;
 
     int nSeg = (int)rings.size() - 1;         // 沿脊线段数
@@ -803,4 +828,5 @@ void TreeGenerator::buildFrond(
                 {v00,v11,v01, v00,v10,v11});   // 背面
         }
     }
+    afterAppend(batch, hlV, hlI);
 }
