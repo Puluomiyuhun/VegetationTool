@@ -10,9 +10,11 @@ void Renderer::init() {
     m_gridShader.loadFromFiles("shaders/grid.vert",     "shaders/grid.frag");
     m_skyShader.loadFromFiles("shaders/sky.vert",       "shaders/sky.frag");
     m_depthShader.loadFromFiles("shaders/depth.vert",   "shaders/depth.frag");
+    m_groundShader.loadFromFiles("shaders/ground.vert", "shaders/ground.frag");
     glGenVertexArrays(1, &m_skyVao);
     initShadowMap();
     buildGrid();
+    buildGround();
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_CULL_FACE);
     glEnable(GL_MULTISAMPLE);   // 配合多重采样 FBO 抗锯齿
@@ -48,28 +50,34 @@ void Renderer::shutdown() {
     m_gridShader.destroy();
     m_skyShader.destroy();
     m_depthShader.destroy();
+    m_groundShader.destroy();
     if (m_skyVao) { glDeleteVertexArrays(1, &m_skyVao); m_skyVao = 0; }
     if (m_shadowFbo) { glDeleteFramebuffers(1, &m_shadowFbo); m_shadowFbo = 0; }
     if (m_shadowTex) { glDeleteTextures(1, &m_shadowTex); m_shadowTex = 0; }
-    for (auto& b : m_batches) {
+    for (auto& b : m_batches)
         b.mesh.destroy();
-        b.texBaseColor.destroy();
-        b.texRoughness.destroy();
-        b.texNormal.destroy();
-        b.texOpacity.destroy();
-    }
     m_batches.clear();
+    for (auto& [k, t] : m_texCache) if (t) t->destroy();
+    m_texCache.clear();
     m_gridMesh.destroy();
+    m_groundMesh.destroy();
+}
+
+// 按路径缓存纹理：命中则直接复用，未命中才从磁盘加载一次。
+std::shared_ptr<Texture> Renderer::getTexture(const std::string& path, bool sRGB) {
+    if (path.empty()) return nullptr;
+    std::string key = (sRGB ? "s:" : "l:") + path;
+    auto it = m_texCache.find(key);
+    if (it != m_texCache.end()) return it->second;
+    auto tex = std::make_shared<Texture>();
+    if (!tex->loadFromFile(path, sRGB)) tex.reset();
+    m_texCache[key] = tex;
+    return tex;
 }
 
 void Renderer::uploadTreeMesh(const TreeMeshData& data) {
-    for (auto& b : m_batches) {
+    for (auto& b : m_batches)
         b.mesh.destroy();
-        b.texBaseColor.destroy();
-        b.texRoughness.destroy();
-        b.texNormal.destroy();
-        b.texOpacity.destroy();
-    }
     m_batches.clear();
 
     for (const auto& batch : data.batches) {
@@ -85,14 +93,11 @@ void Renderer::uploadTreeMesh(const TreeMeshData& data) {
             // pos(3)+normal(3)+uv(2) = 8
             gb.mesh.create(batch.vertices, batch.indices, {3, 3, 2});
 
-        if (!batch.material.baseColorTex.empty())
-            gb.texBaseColor.loadFromFile(batch.material.baseColorTex, true);
-        if (!batch.material.roughnessTex.empty())
-            gb.texRoughness.loadFromFile(batch.material.roughnessTex, false);
-        if (!batch.material.normalTex.empty())
-            gb.texNormal.loadFromFile(batch.material.normalTex, false);
-        if (!batch.material.opacityTex.empty())
-            gb.texOpacity.loadFromFile(batch.material.opacityTex, false);
+        // 贴图走缓存复用：拖参数重建网格时不再重复解码磁盘 PNG
+        gb.texBaseColor = getTexture(batch.material.baseColorTex, true);
+        gb.texRoughness = getTexture(batch.material.roughnessTex, false);
+        gb.texNormal    = getTexture(batch.material.normalTex,    false);
+        gb.texOpacity   = getTexture(batch.material.opacityTex,   false);
 
         m_batches.push_back(std::move(gb));
     }
@@ -169,10 +174,12 @@ void Renderer::renderShadowPass() {
         if (!gb.mesh.valid()) continue;
         m_depthShader.setInt("uIsLeaf", gb.isLeaf ? 1 : 0);
         m_depthShader.setFloat("uAlphaCutoff", gb.material.alphaCutoff);
-        m_depthShader.setInt("uHasOpacity", gb.texOpacity.valid() ? 1 : 0);
-        m_depthShader.setInt("uHasBaseColor", gb.texBaseColor.valid() ? 1 : 0);
-        if (gb.texOpacity.valid())   gb.texOpacity.bind(3);
-        if (gb.texBaseColor.valid()) gb.texBaseColor.bind(0);
+        bool hasOp = gb.texOpacity && gb.texOpacity->valid();
+        bool hasBc = gb.texBaseColor && gb.texBaseColor->valid();
+        m_depthShader.setInt("uHasOpacity", hasOp ? 1 : 0);
+        m_depthShader.setInt("uHasBaseColor", hasBc ? 1 : 0);
+        if (hasOp) gb.texOpacity->bind(3);
+        if (hasBc) gb.texBaseColor->bind(0);
         if (gb.isLeaf) glDisable(GL_CULL_FACE);
         else           glCullFace(GL_FRONT);
         gb.mesh.draw();
@@ -183,21 +190,26 @@ void Renderer::renderShadowPass() {
 }
 
 void Renderer::bindBatchTextures(Shader& sh, GpuBatch& gb) {
+    bool hasBc = gb.texBaseColor && gb.texBaseColor->valid();
+    bool hasRo = gb.texRoughness && gb.texRoughness->valid();
+    bool hasNo = gb.texNormal    && gb.texNormal->valid();
+    bool hasOp = gb.texOpacity   && gb.texOpacity->valid();
+
     sh.setInt("uTexBaseColor", 0);
-    sh.setInt("uHasBaseColor", gb.texBaseColor.valid() ? 1 : 0);
-    if (gb.texBaseColor.valid()) gb.texBaseColor.bind(0);
+    sh.setInt("uHasBaseColor", hasBc ? 1 : 0);
+    if (hasBc) gb.texBaseColor->bind(0);
 
     sh.setInt("uTexRoughness", 1);
-    sh.setInt("uHasRoughness", gb.texRoughness.valid() ? 1 : 0);
-    if (gb.texRoughness.valid()) gb.texRoughness.bind(1);
+    sh.setInt("uHasRoughness", hasRo ? 1 : 0);
+    if (hasRo) gb.texRoughness->bind(1);
 
     sh.setInt("uTexNormal",    2);
-    sh.setInt("uHasNormal",    gb.texNormal.valid() ? 1 : 0);
-    if (gb.texNormal.valid()) gb.texNormal.bind(2);
+    sh.setInt("uHasNormal",    hasNo ? 1 : 0);
+    if (hasNo) gb.texNormal->bind(2);
 
     sh.setInt("uTexOpacity",   3);
-    sh.setInt("uHasOpacity",   gb.texOpacity.valid() ? 1 : 0);
-    if (gb.texOpacity.valid()) gb.texOpacity.bind(3);
+    sh.setInt("uHasOpacity",   hasOp ? 1 : 0);
+    if (hasOp) gb.texOpacity->bind(3);
 }
 
 void Renderer::render(const OrbitCamera& camera, float aspect, bool wireframe) {
@@ -263,6 +275,10 @@ void Renderer::render(const OrbitCamera& camera, float aspect, bool wireframe) {
     }
 
     glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+
+    // 地面在植被之后绘制: 半透明混合, 让埋在地下(被地面遮挡)的植被透出来
+    if (lighting.groundEnabled)
+        renderGround(vp, camera.position());
 }
 
 void Renderer::buildGrid() {
@@ -282,6 +298,56 @@ void Renderer::renderGrid(const glm::mat4& vp) {
     m_gridShader.setMat4("uViewProjection", glm::value_ptr(vp));
     m_gridShader.setVec3("uColor", 0.45f, 0.45f, 0.47f);
     m_gridMesh.draw(GL_LINES);
+}
+
+// 地面平面：一个大四边形，位于 y=0，法线朝上，UV 用于潜在纹理(此处仅用纯色)。
+// 顶点格式 pos(3)+normal(3) = 6 floats。
+void Renderer::buildGround() {
+    float S = 100.0f;
+    float y = -0.004f;   // 略低于 y=0, 避免与参考网格线 z-fighting
+    std::vector<float> verts = {
+        -S, y, -S,  0,1,0,
+         S, y, -S,  0,1,0,
+         S, y,  S,  0,1,0,
+        -S, y,  S,  0,1,0,
+    };
+    std::vector<uint32_t> idx = {0,2,1, 0,3,2};
+    m_groundMesh.create(verts, idx, {3, 3});
+}
+
+// 地面用与天空相同的渐变公式着色(按视线方向), 与远端天空无缝融合, 看不出面片;
+// 仅额外接收阴影压暗。半透明混合让被遮挡的植被透出。植被绘制之后调用。
+void Renderer::renderGround(const glm::mat4& vp, const glm::vec3& camPos) {
+    glm::mat4 model = glm::mat4(1.0f);
+    m_groundShader.use();
+    m_groundShader.setMat4("uViewProjection", glm::value_ptr(vp));
+    m_groundShader.setMat4("uModel", glm::value_ptr(model));
+    auto& l = lighting;
+    m_groundShader.setVec3("uCamPos", camPos.x, camPos.y, camPos.z);
+    m_groundShader.setVec3("uSkyTop",     l.skyTop.x,     l.skyTop.y,     l.skyTop.z);
+    m_groundShader.setVec3("uSkyHorizon", l.skyHorizon.x, l.skyHorizon.y, l.skyHorizon.z);
+    m_groundShader.setVec3("uSkyGround",  l.skyGround.x,  l.skyGround.y,  l.skyGround.z);
+    m_groundShader.setVec3("uLightDir", l.lightDir.x, l.lightDir.y, l.lightDir.z);
+    m_groundShader.setFloat("uAlpha", l.groundAlpha);
+    // 阴影
+    m_groundShader.setMat4("uLightSpace", glm::value_ptr(m_lightSpace));
+    m_groundShader.setInt("uShadowMap", 4);
+    m_groundShader.setInt("uShadowEnabled", l.shadowEnabled ? 1 : 0);
+    m_groundShader.setFloat("uGroundShadowStrength", l.groundShadowStrength);
+    m_groundShader.setFloat("uShadowBias", l.shadowBias);
+    glActiveTexture(GL_TEXTURE4);
+    glBindTexture(GL_TEXTURE_2D, m_shadowTex);
+    glActiveTexture(GL_TEXTURE0);
+
+    // 半透明混合: 保留深度测试(地面挡在地下植被之前才混合), 但不写深度
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glDepthMask(GL_FALSE);
+    glDisable(GL_CULL_FACE);
+    m_groundMesh.draw();
+    glEnable(GL_CULL_FACE);
+    glDepthMask(GL_TRUE);
+    glDisable(GL_BLEND);
 }
 
 // 渐变天空：全屏三角形，按视线仰角在天顶/地平线/地面色间插值

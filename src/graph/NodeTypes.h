@@ -52,7 +52,8 @@ struct TrunkParams {
     int   sides       = 8;
     int   lengthSegs  = 10;
     int   seed        = 1;
-    float uvTiling    = 3.0f;   // 树皮纹理沿枝干长度的平铺次数
+    float uvTilingU   = 1.0f;   // 树皮纹理沿枝干周向的平铺次数
+    float uvTilingV   = 3.0f;   // 树皮纹理沿枝干长度的平铺次数
     MaterialParams material = {{0.38f,0.22f,0.10f}, 0.85f, 0.0f, 0.5f, 0.0f};
 };
 
@@ -77,7 +78,8 @@ struct BranchParams {
     int   sides        = 6;
     int   lengthSegs   = 6;
     int   seed         = 2;
-    float uvTiling     = 2.0f;   // 树皮纹理沿枝条长度的平铺次数
+    float uvTilingU    = 1.0f;   // 树皮纹理沿枝条周向的平铺次数
+    float uvTilingV    = 2.0f;   // 树皮纹理沿枝条长度的平铺次数
     MaterialParams material = {{0.32f,0.18f,0.08f}, 0.88f, 0.0f, 0.55f, 0.0f};
 };
 
@@ -100,7 +102,8 @@ struct TwigParams {
     int   lengthSegs   = 5;
     bool  alternating  = true;
     int   seed         = 3;
-    float uvTiling     = 1.0f;   // 树皮纹理沿细枝长度的平铺次数
+    float uvTilingU    = 1.0f;   // 树皮纹理沿细枝周向的平铺次数
+    float uvTilingV    = 1.0f;   // 树皮纹理沿细枝长度的平铺次数
     MaterialParams material = {{0.28f,0.16f,0.07f}, 0.9f, 0.0f, 0.6f, 0.0f};
 };
 
@@ -136,7 +139,8 @@ struct RootsParams {
     int   sides       = 6;
     int   lengthSegs  = 10;
     int   seed        = 5;
-    float uvTiling    = 3.0f;
+    float uvTilingU   = 1.0f;
+    float uvTilingV   = 3.0f;
     MaterialParams material = {{0.30f,0.19f,0.10f}, 0.9f, 0.0f, 0.55f, 0.0f};
 };
 
@@ -159,7 +163,8 @@ struct SpineParams {
     int   sides        = 5;      // 茎截面边数
     int   lengthSegs   = 12;     // 长度细分(越多脊线越平滑, Frond 叶带也越圆顺)
     int   seed         = 6;
-    float uvTiling     = 1.0f;
+    float uvTilingU    = 1.0f;
+    float uvTilingV    = 1.0f;
     MaterialParams material = {{0.22f,0.42f,0.10f}, 0.7f, 0.0f, 0.45f, 0.2f};
 };
 

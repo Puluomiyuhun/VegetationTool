@@ -64,7 +64,7 @@ private:
 
     void appendCylinder(MeshBatch& batch,
                         const std::vector<BranchRing>& rings, int sides,
-                        float uvTiling = 1.0f);
+                        float uvTilingU = 1.0f, float uvTilingV = 1.0f);
 
     // 生成"枝领"裙边：把子枝基部一圈外沿顶点沿径向投影到父级圆柱表面，
     // 与子枝第一圈组成一段贴合父级表面的过渡带（消除穿模）。
@@ -73,7 +73,7 @@ private:
                       glm::vec3 parentC, glm::vec3 parentA, float parentR,
                       glm::vec3 childBase, glm::vec3 childDir, glm::vec3 childRight,
                       float startR, float baseFlare, int sides,
-                      float uvTiling, float branchTotalLen,
+                      float uvTilingU, float uvTilingV, float branchTotalLen,
                       const std::vector<BranchRing>* trunkRings = nullptr,
                       float collarSink = 0.0f);
 };

@@ -89,7 +89,8 @@ bool TrunkNode::drawProperties() {
         changed |= ImGui::SliderFloat("Joint Bulge",  &params.jointBulge,  0.0f, 1.0f);
         changed |= ImGui::SliderInt  ("Sides",        &params.sides,       3, 16);
         changed |= ImGui::SliderInt  ("Length Segs",  &params.lengthSegs,  2, 24);
-        changed |= ImGui::SliderFloat("UV Tiling",    &params.uvTiling,    0.1f, 20.0f);
+        changed |= ImGui::SliderFloat("UV Tiling U",  &params.uvTilingU,   0.1f, 20.0f);
+        changed |= ImGui::SliderFloat("UV Tiling V",  &params.uvTilingV,   0.1f, 20.0f);
         changed |= ImGui::SliderInt  ("Seed",         &params.seed,        0, 999);
     }
     if (ImGui::CollapsingHeader("Placement", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -143,7 +144,8 @@ bool BranchNode::drawProperties() {
         changed |= ImGui::SliderFloat("Joint Bulge",    &params.jointBulge,   0.0f, 1.0f);
         changed |= ImGui::SliderInt  ("Sides",         &params.sides,        3, 12);
         changed |= ImGui::SliderInt  ("Length Segs",   &params.lengthSegs,   2, 16);
-        changed |= ImGui::SliderFloat("UV Tiling",     &params.uvTiling,     0.1f, 20.0f);
+        changed |= ImGui::SliderFloat("UV Tiling U",   &params.uvTilingU,    0.1f, 20.0f);
+        changed |= ImGui::SliderFloat("UV Tiling V",   &params.uvTilingV,    0.1f, 20.0f);
     }
     if (ImGui::CollapsingHeader("Material", ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui::PushID("mat_branch");
@@ -181,7 +183,8 @@ bool TwigNode::drawProperties() {
         changed |= ImGui::SliderFloat("Gnarl",          &params.gnarl,        0.0f, 90.0f);
         changed |= ImGui::SliderInt  ("Sides",         &params.sides,        3, 8);
         changed |= ImGui::SliderInt  ("Length Segs",   &params.lengthSegs,   2, 12);
-        changed |= ImGui::SliderFloat("UV Tiling",     &params.uvTiling,     0.1f, 20.0f);
+        changed |= ImGui::SliderFloat("UV Tiling U",   &params.uvTilingU,    0.1f, 20.0f);
+        changed |= ImGui::SliderFloat("UV Tiling V",   &params.uvTilingV,    0.1f, 20.0f);
     }
     if (ImGui::CollapsingHeader("Material", ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui::PushID("mat_twig");
@@ -242,7 +245,8 @@ bool RootsNode::drawProperties() {
         changed |= ImGui::SliderFloat("Joint Bulge",  &params.jointBulge,  0.0f, 1.0f);
         changed |= ImGui::SliderInt  ("Sides",        &params.sides,       3, 12);
         changed |= ImGui::SliderInt  ("Length Segs",  &params.lengthSegs,  2, 20);
-        changed |= ImGui::SliderFloat("UV Tiling",    &params.uvTiling,    0.1f, 20.0f);
+        changed |= ImGui::SliderFloat("UV Tiling U",  &params.uvTilingU,   0.1f, 20.0f);
+        changed |= ImGui::SliderFloat("UV Tiling V",  &params.uvTilingV,   0.1f, 20.0f);
     }
     if (ImGui::CollapsingHeader("Material", ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui::PushID("mat_roots");
@@ -278,7 +282,8 @@ bool SpineNode::drawProperties() {
         changed |= ImGui::SliderFloat("Gnarl",         &params.gnarl,        0.0f, 90.0f);
         changed |= ImGui::SliderInt  ("Sides",         &params.sides,        3, 10);
         changed |= ImGui::SliderInt  ("Length Segs",   &params.lengthSegs,   3, 24);
-        changed |= ImGui::SliderFloat("UV Tiling",     &params.uvTiling,     0.1f, 10.0f);
+        changed |= ImGui::SliderFloat("UV Tiling U",   &params.uvTilingU,    0.1f, 10.0f);
+        changed |= ImGui::SliderFloat("UV Tiling V",   &params.uvTilingV,    0.1f, 10.0f);
     }
     if (ImGui::CollapsingHeader("Material", ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui::PushID("mat_spine");

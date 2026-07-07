@@ -4,6 +4,7 @@
 #include <memory>
 #include <vector>
 #include <utility>
+#include <unordered_set>
 
 namespace ned = ax::NodeEditor;
 
@@ -14,7 +15,7 @@ public:
     void render(NodeGraph& graph, NodeId& selectedNodeId);
 
     // 读取工程后调用：强制下一帧按各节点 editorPos 重新摆放
-    void requestReposition() { m_firstFrame = true; }
+    void requestReposition() { m_firstFrame = true; m_positioned.clear(); }
 
 private:
     ned::EditorContext* m_ctx = nullptr;
@@ -35,4 +36,9 @@ private:
     bool m_firstFrame = true;
     // 粘贴后需要在下一帧重新定位/选中的新节点
     std::vector<NodeId> m_pastePendingSelect;
+    // 已被 node-editor 定位过的节点集合：新节点(不在此集合)先按 editorPos 定位，
+    // 定位后才纳入“每帧同步位置”逻辑，避免新节点首帧 GetNodePosition 返回(0,0)覆盖坐标。
+    std::unordered_set<NodeId> m_positioned;
+    // 画布空间下的右键新增位置(由背景右键菜单记录)
+    glm::vec2 m_contextCanvasPos = {0.0f, 0.0f};
 };

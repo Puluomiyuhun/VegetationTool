@@ -40,6 +40,9 @@ void writeLighting(std::ostream& o, const LightingParams& L) {
     o << "shadowEnabled "   << (L.shadowEnabled ? 1 : 0) << '\n';
     o << "shadowStrength "  << L.shadowStrength  << '\n';
     o << "shadowBias "      << L.shadowBias      << '\n';
+    o << "groundShadowStrength " << L.groundShadowStrength << '\n';
+    o << "groundEnabled "   << (L.groundEnabled ? 1 : 0) << '\n';
+    o << "groundAlpha "     << L.groundAlpha     << '\n';
     o << "ENDLIGHTING\n";
 }
 
@@ -65,7 +68,8 @@ void writeNode(std::ostream& o, const TreeNode* n) {
         o << "sides "       << p.sides       << '\n';
         o << "lengthSegs "  << p.lengthSegs  << '\n';
         o << "seed "        << p.seed        << '\n';
-        o << "uvTiling "    << p.uvTiling    << '\n';
+        o << "uvTilingU "   << p.uvTilingU   << '\n';
+        o << "uvTilingV "   << p.uvTilingV   << '\n';
         writeMaterial(o, p.material);
         break;
     }
@@ -89,7 +93,8 @@ void writeNode(std::ostream& o, const TreeNode* n) {
         o << "sides "       << p.sides       << '\n';
         o << "lengthSegs "  << p.lengthSegs  << '\n';
         o << "seed "        << p.seed        << '\n';
-        o << "uvTiling "    << p.uvTiling    << '\n';
+        o << "uvTilingU "   << p.uvTilingU   << '\n';
+        o << "uvTilingV "   << p.uvTilingV   << '\n';
         writeMaterial(o, p.material);
         break;
     }
@@ -115,7 +120,8 @@ void writeNode(std::ostream& o, const TreeNode* n) {
         o << "sides "       << p.sides       << '\n';
         o << "lengthSegs "  << p.lengthSegs  << '\n';
         o << "seed "        << p.seed        << '\n';
-        o << "uvTiling "    << p.uvTiling    << '\n';
+        o << "uvTilingU "   << p.uvTilingU   << '\n';
+        o << "uvTilingV "   << p.uvTilingV   << '\n';
         writeMaterial(o, p.material);
         break;
     }
@@ -139,7 +145,8 @@ void writeNode(std::ostream& o, const TreeNode* n) {
         o << "lengthSegs "  << p.lengthSegs  << '\n';
         o << "alternating " << (p.alternating ? 1 : 0) << '\n';
         o << "seed "        << p.seed        << '\n';
-        o << "uvTiling "    << p.uvTiling    << '\n';
+        o << "uvTilingU "   << p.uvTilingU   << '\n';
+        o << "uvTilingV "   << p.uvTilingV   << '\n';
         writeMaterial(o, p.material);
         break;
     }
@@ -174,7 +181,8 @@ void writeNode(std::ostream& o, const TreeNode* n) {
         o << "sides "       << p.sides       << '\n';
         o << "lengthSegs "  << p.lengthSegs  << '\n';
         o << "seed "        << p.seed        << '\n';
-        o << "uvTiling "    << p.uvTiling    << '\n';
+        o << "uvTilingU "   << p.uvTilingU   << '\n';
+        o << "uvTilingV "   << p.uvTilingV   << '\n';
         writeMaterial(o, p.material);
         break;
     }
@@ -243,6 +251,9 @@ void readLighting(const KV& kv, LightingParams& L) {
     L.shadowEnabled   = getI (kv, "shadowEnabled",   L.shadowEnabled ? 1 : 0) != 0;
     L.shadowStrength  = getF (kv, "shadowStrength",  L.shadowStrength);
     L.shadowBias      = getF (kv, "shadowBias",      L.shadowBias);
+    L.groundShadowStrength = getF (kv, "groundShadowStrength", L.groundShadowStrength);
+    L.groundEnabled   = getI (kv, "groundEnabled",   L.groundEnabled ? 1 : 0) != 0;
+    L.groundAlpha     = getF (kv, "groundAlpha",     L.groundAlpha);
 }
 
 void applyParams(TreeNode* n, const KV& kv) {
@@ -256,7 +267,9 @@ void applyParams(TreeNode* n, const KV& kv) {
         p.gnarl=getF(kv,"gnarl",p.gnarl); p.taperPow=getF(kv,"taperPow",p.taperPow);
         p.jointCount=getI(kv,"jointCount",p.jointCount); p.jointBulge=getF(kv,"jointBulge",p.jointBulge);
         p.sides=getI(kv,"sides",p.sides); p.lengthSegs=getI(kv,"lengthSegs",p.lengthSegs);
-        p.seed=getI(kv,"seed",p.seed); p.uvTiling=getF(kv,"uvTiling",p.uvTiling);
+        p.seed=getI(kv,"seed",p.seed);
+        p.uvTilingU=getF(kv,"uvTilingU",p.uvTilingU);
+        p.uvTilingV=getF(kv,"uvTilingV",getF(kv,"uvTiling",p.uvTilingV));
         readMaterial(kv, p.material); break;
     }
     case NodeType::Roots: {
@@ -271,7 +284,9 @@ void applyParams(TreeNode* n, const KV& kv) {
         p.noiseFreq=getF(kv,"noiseFreq",p.noiseFreq); p.gnarl=getF(kv,"gnarl",p.gnarl);
         p.jointCount=getI(kv,"jointCount",p.jointCount); p.jointBulge=getF(kv,"jointBulge",p.jointBulge);
         p.sides=getI(kv,"sides",p.sides); p.lengthSegs=getI(kv,"lengthSegs",p.lengthSegs);
-        p.seed=getI(kv,"seed",p.seed); p.uvTiling=getF(kv,"uvTiling",p.uvTiling);
+        p.seed=getI(kv,"seed",p.seed);
+        p.uvTilingU=getF(kv,"uvTilingU",p.uvTilingU);
+        p.uvTilingV=getF(kv,"uvTilingV",getF(kv,"uvTiling",p.uvTilingV));
         readMaterial(kv, p.material); break;
     }
     case NodeType::Branch: {
@@ -286,7 +301,9 @@ void applyParams(TreeNode* n, const KV& kv) {
         p.gnarl=getF(kv,"gnarl",p.gnarl); p.branchCount=getI(kv,"branchCount",p.branchCount);
         p.jointCount=getI(kv,"jointCount",p.jointCount); p.jointBulge=getF(kv,"jointBulge",p.jointBulge);
         p.sides=getI(kv,"sides",p.sides); p.lengthSegs=getI(kv,"lengthSegs",p.lengthSegs);
-        p.seed=getI(kv,"seed",p.seed); p.uvTiling=getF(kv,"uvTiling",p.uvTiling);
+        p.seed=getI(kv,"seed",p.seed);
+        p.uvTilingU=getF(kv,"uvTilingU",p.uvTilingU);
+        p.uvTilingV=getF(kv,"uvTilingV",getF(kv,"uvTiling",p.uvTilingV));
         readMaterial(kv, p.material); break;
     }
     case NodeType::Twig: {
@@ -300,7 +317,9 @@ void applyParams(TreeNode* n, const KV& kv) {
         p.gnarl=getF(kv,"gnarl",p.gnarl); p.twigCount=getI(kv,"twigCount",p.twigCount);
         p.sides=getI(kv,"sides",p.sides); p.lengthSegs=getI(kv,"lengthSegs",p.lengthSegs);
         p.alternating=getI(kv,"alternating",p.alternating?1:0)!=0;
-        p.seed=getI(kv,"seed",p.seed); p.uvTiling=getF(kv,"uvTiling",p.uvTiling);
+        p.seed=getI(kv,"seed",p.seed);
+        p.uvTilingU=getF(kv,"uvTilingU",p.uvTilingU);
+        p.uvTilingV=getF(kv,"uvTilingV",getF(kv,"uvTiling",p.uvTilingV));
         readMaterial(kv, p.material); break;
     }
     case NodeType::LeafCluster: {
@@ -322,7 +341,9 @@ void applyParams(TreeNode* n, const KV& kv) {
         p.noiseAmount=getF(kv,"noiseAmount",p.noiseAmount); p.noiseFreq=getF(kv,"noiseFreq",p.noiseFreq);
         p.gnarl=getF(kv,"gnarl",p.gnarl); p.spineCount=getI(kv,"spineCount",p.spineCount);
         p.sides=getI(kv,"sides",p.sides); p.lengthSegs=getI(kv,"lengthSegs",p.lengthSegs);
-        p.seed=getI(kv,"seed",p.seed); p.uvTiling=getF(kv,"uvTiling",p.uvTiling);
+        p.seed=getI(kv,"seed",p.seed);
+        p.uvTilingU=getF(kv,"uvTilingU",p.uvTilingU);
+        p.uvTilingV=getF(kv,"uvTilingV",getF(kv,"uvTiling",p.uvTilingV));
         readMaterial(kv, p.material); break;
     }
     case NodeType::Frond: {

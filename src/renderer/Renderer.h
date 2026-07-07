@@ -8,6 +8,8 @@
 #include <glm/glm.hpp>
 #include <vector>
 #include <string>
+#include <memory>
+#include <unordered_map>
 
 // 单个材质批次（CPU侧）
 // branch 顶点格式: pos(3)+normal(3)+uv(2) = 8 floats
@@ -40,6 +42,10 @@ struct LightingParams {
     bool  shadowEnabled  = true;
     float shadowStrength = 0.6f;    // 阴影浓度(0=无, 1=全黑)
     float shadowBias     = 0.0025f; // 深度偏移，抑制阴影痤疮(shadow acne)
+    float groundShadowStrength = 0.4f; // 地面接收阴影的强度(独立于树自阴影)
+    // 地面(用天空渐变着色, 与远端天空融合; 接收阴影压暗)
+    bool  groundEnabled  = true;
+    float groundAlpha    = 0.85f;   // 地面不透明度: <1 让被遮挡的植被半透明透出
 };
 
 class Renderer {
@@ -57,20 +63,26 @@ private:
         Mesh           mesh;
         MaterialParams material;
         bool           isLeaf = false;
-        Texture        texBaseColor;   // unit 0 — basecolor/albedo
-        Texture        texRoughness;   // unit 1 — roughness(R) metallic(G)
-        Texture        texNormal;      // unit 2 — tangent-space normal
-        Texture        texOpacity;     // unit 3 — opacity mask(R)（叶片alpha剔除）
+        // 贴图改为按路径共享(见 m_texCache)，避免每次重建网格都从磁盘重新解码 → 卡顿。
+        std::shared_ptr<Texture> texBaseColor;   // unit 0 — basecolor/albedo
+        std::shared_ptr<Texture> texRoughness;   // unit 1 — roughness(R) metallic(G)
+        std::shared_ptr<Texture> texNormal;      // unit 2 — tangent-space normal
+        std::shared_ptr<Texture> texOpacity;     // unit 3 — opacity mask(R)（叶片alpha剔除）
     };
 
     std::vector<GpuBatch> m_batches;
+    // 贴图缓存：路径(+sRGB标志) → 已加载纹理。重建网格时命中缓存直接复用, 不再重复解码。
+    std::unordered_map<std::string, std::shared_ptr<Texture>> m_texCache;
+    std::shared_ptr<Texture> getTexture(const std::string& path, bool sRGB);
 
     Shader m_branchShader;
     Shader m_leafShader;
     Shader m_gridShader;
     Shader m_skyShader;
     Shader m_depthShader;   // 阴影深度 pass
+    Shader m_groundShader;  // 地面(接收投影)
     Mesh   m_gridMesh;
+    Mesh   m_groundMesh;    // 地面平面
     GLuint m_skyVao = 0;   // 空 VAO，用于全屏三角形(顶点由 gl_VertexID 生成)
 
     // ---- 阴影贴图 ----
@@ -89,6 +101,8 @@ private:
     void setLightUniforms(Shader& sh);
     void bindBatchTextures(Shader& sh, GpuBatch& gb);
     void buildGrid();
+    void buildGround();
     void renderGrid(const glm::mat4& vp);
+    void renderGround(const glm::mat4& vp, const glm::vec3& camPos);
     void renderSky(const OrbitCamera& camera, float aspect);
 };

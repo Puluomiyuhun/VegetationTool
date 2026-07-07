@@ -260,7 +260,11 @@ void UIManager::render(NodeGraph& graph, NodeId& selectedNodeId,
         ImGui::SeparatorText("Shadow");
         ImGui::Checkbox("Enable Shadow", &L.shadowEnabled);
         ImGui::SliderFloat("Shadow Strength", &L.shadowStrength, 0.0f, 1.0f);
+        ImGui::SliderFloat("Ground Shadow Strength", &L.groundShadowStrength, 0.0f, 1.0f);
         ImGui::SliderFloat("Shadow Bias",     &L.shadowBias,     0.0f, 0.01f, "%.4f");
+        ImGui::SeparatorText("Ground");
+        ImGui::Checkbox("Enable Ground", &L.groundEnabled);
+        ImGui::SliderFloat("Ground Opacity", &L.groundAlpha, 0.0f, 1.0f);
     }
     ImGui::End();
 

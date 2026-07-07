@@ -73,9 +73,11 @@ void NodeEditorPanel::render(NodeGraph& graph, NodeId& selectedNodeId) {
 
     // 首帧设置节点位置
     if (m_firstFrame) {
-        for (const auto& [id, node] : graph.nodes())
+        for (const auto& [id, node] : graph.nodes()) {
             ned::SetNodePosition((ned::NodeId)id,
                 ImVec2(node->editorPos.x, node->editorPos.y));
+            m_positioned.insert(id);
+        }
         m_firstFrame = false;
     }
 
@@ -121,20 +123,27 @@ void NodeEditorPanel::render(NodeGraph& graph, NodeId& selectedNodeId) {
     selectedNodeId = (count > 0) ? (NodeId)sel[0].Get() : INVALID_NODE;
 
     // 上一帧粘贴出的新节点：本帧摆位并选中。
-    // 必须在“同步 editorPos”循环之前处理：新节点首帧尚未被编辑器定位(默认0,0)，
-    // 若先跑同步循环会把粘贴时算好的 editorPos 覆盖成 0,0，导致所有节点叠在一起。
     if (!m_pastePendingSelect.empty()) {
         ned::ClearSelection();
         for (NodeId nid : m_pastePendingSelect) {
-            if (auto* n = graph.getNode(nid))
+            if (auto* n = graph.getNode(nid)) {
                 ned::SetNodePosition((ned::NodeId)nid, ImVec2(n->editorPos.x, n->editorPos.y));
+                m_positioned.insert(nid);
+            }
             ned::SelectNode((ned::NodeId)nid, true);
         }
         m_pastePendingSelect.clear();
     }
 
-    // 每帧同步节点位置到 editorPos（支持拖动后持久化）
+    // 每帧同步节点位置到 editorPos（支持拖动后持久化）。
+    // 新增节点(右键/加子节点/加载)首帧尚未被编辑器定位：先按其 editorPos 定位，
+    // 加入 m_positioned 后再参与“读回位置”，否则 GetNodePosition 返回(0,0)会把坐标覆盖掉。
     for (auto& [id, node] : graph.nodes()) {
+        if (m_positioned.find(id) == m_positioned.end()) {
+            ned::SetNodePosition((ned::NodeId)id, ImVec2(node->editorPos.x, node->editorPos.y));
+            m_positioned.insert(id);
+            continue;
+        }
         ImVec2 pos = ned::GetNodePosition((ned::NodeId)id);
         node->editorPos = {pos.x, pos.y};
     }
@@ -222,9 +231,16 @@ std::vector<NodeId> NodeEditorPanel::pasteClipboard(NodeGraph& graph, glm::vec2 
 
 void NodeEditorPanel::handleContextMenu(NodeGraph& graph) {
     ned::Suspend();
-    if (ImGui::BeginPopupContextWindow()) {
-        ImVec2 mousePos = ImGui::GetMousePosOnOpeningCurrentPopup();
-        glm::vec2 canvasPos = {mousePos.x, mousePos.y};
+    // node-editor 专用的背景右键检测：命中空白画布时打开新增菜单，
+    // 并把当前鼠标屏幕坐标转换为画布坐标，作为新节点落点(否则用屏幕坐标会偏得很远)。
+    if (ned::ShowBackgroundContextMenu()) {
+        ImVec2 canvas = ned::ScreenToCanvas(ImGui::GetMousePos());
+        m_contextCanvasPos = {canvas.x, canvas.y};
+        ImGui::OpenPopup("NodeCanvasContextMenu");
+    }
+
+    if (ImGui::BeginPopup("NodeCanvasContextMenu")) {
+        glm::vec2 canvasPos = m_contextCanvasPos;
 
         if (ImGui::MenuItem("Add Trunk"))
             graph.addNode(NodeType::Trunk, canvasPos);
