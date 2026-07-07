@@ -151,11 +151,13 @@ void NodeGraph::markDirty() { m_dirty = true; }
 void NodeGraph::clear() {
     m_nodes.clear();
     m_links.clear();
+    m_comments.clear();
     m_pinOwner.clear();
     m_pinToLink.clear();
     m_nextNodeId = 1;
     m_nextPinId  = 10000;
     m_nextLinkId = 100000;
+    m_nextCommentId = 1000000;
     m_dirty = true;
 }
 
@@ -173,4 +175,29 @@ NodeId NodeGraph::addChildNode(NodeId parentId, NodeType type) {
     if (child && !child->inputPins.empty())
         addLink(parent->outputPin.id, child->inputPins[0].id);
     return childId;
+}
+
+// ---- 注释框 ----
+NodeId NodeGraph::addComment(glm::vec2 pos) {
+    CommentFrame c;
+    c.id = m_nextCommentId++;
+    c.editorPos = pos;
+    m_comments.push_back(c);
+    // 注释框不参与生成, 不置 dirty
+    return c.id;
+}
+
+void NodeGraph::removeComment(NodeId id) {
+    m_comments.erase(std::remove_if(m_comments.begin(), m_comments.end(),
+        [id](const CommentFrame& c){ return c.id == id; }), m_comments.end());
+}
+
+CommentFrame* NodeGraph::getComment(NodeId id) {
+    for (auto& c : m_comments) if (c.id == id) return &c;
+    return nullptr;
+}
+
+bool NodeGraph::isComment(NodeId id) const {
+    for (const auto& c : m_comments) if (c.id == id) return true;
+    return false;
 }

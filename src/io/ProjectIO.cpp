@@ -413,6 +413,18 @@ bool parseStream(NodeGraph& graph, std::istream& f, LightingParams* lighting = n
         } else if (tag == "LINK") {
             uint32_t from, to; ss >> from >> to;
             pendingLinks.emplace_back(from, to);
+        } else if (tag == "COMMENT") {
+            float px, py, sx, sy;
+            ss >> px >> py >> sx >> sy;
+            std::string text;
+            std::getline(f, text);            // 标题文本(允许含空格)
+            std::string end;
+            std::getline(f, end);             // 读掉 ENDCOMMENT
+            NodeId cid = graph.addComment({px, py});
+            if (CommentFrame* c = graph.getComment(cid)) {
+                c->text = text;
+                c->size = {sx, sy};
+            }
         }
     }
 
@@ -646,6 +658,13 @@ bool save(const NodeGraph& graph, const std::string& path,
     for (const auto& [id, node] : graph.nodes()) {
         for (const TreeNode* child : graph.childrenOf(id))
             f << "LINK " << id << ' ' << child->id << '\n';
+    }
+    // 注释框(编辑器标注)：位置/尺寸写在首行，标题文本单独一行(允许含空格)
+    for (const auto& c : graph.comments()) {
+        f << "COMMENT " << c.editorPos.x << ' ' << c.editorPos.y
+          << ' ' << c.size.x << ' ' << c.size.y << '\n';
+        f << c.text << '\n';
+        f << "ENDCOMMENT\n";
     }
     // 光照/场景设置(可选)一并写入
     if (lighting) writeLighting(f, *lighting);

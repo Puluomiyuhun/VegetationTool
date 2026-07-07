@@ -4,6 +4,7 @@
 #include <imgui_node_editor.h>
 #include <unordered_map>
 #include <algorithm>
+#include <cstring>
 
 namespace ned = ax::NodeEditor;
 
@@ -28,6 +29,47 @@ void NodeEditorPanel::init() {
 
 void NodeEditorPanel::shutdown() {
     if (m_ctx) { ned::DestroyEditor(m_ctx); m_ctx = nullptr; }
+}
+
+// 绘制注释框: 用 ned::Group 生成一个可拖动/可缩放的框, 框住其覆盖范围内的节点;
+// 顶部用 BeginGroupHint 画一条随缩放浮动的大标题条, 双击可就地编辑标题文字。
+void NodeEditorPanel::drawComment(CommentFrame& c) {
+    const float alpha = 0.75f;
+    ImGui::PushStyleVar(ImGuiStyleVar_Alpha, alpha);
+    ned::PushStyleColor(ned::StyleColor_NodeBg,     ImColor(120, 180, 90, 64));
+    ned::PushStyleColor(ned::StyleColor_NodeBorder, ImColor(180, 220, 140, 96));
+
+    ned::BeginNode((ned::NodeId)c.id);
+    ImGui::PushID((int)c.id);
+    ImGui::TextUnformatted(c.text.c_str());
+    ned::Group(ImVec2(c.size.x, c.size.y));
+    ImGui::PopID();
+    ned::EndNode();
+
+    ned::PopStyleColor(2);
+    ImGui::PopStyleVar();
+
+    // 记录被 node-editor 反馈的实际大小(用户拖拽缩放后)
+    ImVec2 sz = ned::GetNodeSize((ned::NodeId)c.id);
+    if (sz.x > 1.0f && sz.y > 1.0f) c.size = {sz.x, sz.y};
+
+    // 顶部浮动标题条 + 双击编辑
+    if (ned::BeginGroupHint((ned::NodeId)c.id)) {
+        int bgAlpha = (int)(ImGui::GetStyle().Alpha * 255);
+        ImVec2 min = ned::GetGroupMin();
+        ImGui::SetCursorScreenPos(min - ImVec2(-8, ImGui::GetTextLineHeightWithSpacing() + 4));
+        ImGui::BeginGroup();
+        ImGui::TextUnformatted(c.text.c_str());
+        ImGui::EndGroup();
+
+        ImVec2 tl = ImGui::GetItemRectMin();
+        ImVec2 br = ImGui::GetItemRectMax();
+        tl.x -= 8; tl.y -= 4; br.x += 8; br.y += 4;
+        auto* dl = ned::GetHintBackgroundDrawList();
+        dl->AddRectFilled(tl, br, IM_COL32(120, 180, 90, 64 * bgAlpha / 255), 4.0f);
+        dl->AddRect(tl, br, IM_COL32(180, 220, 140, 128 * bgAlpha / 255), 4.0f);
+    }
+    ned::EndGroupHint();
 }
 
 void NodeEditorPanel::drawNode(const TreeNode* node) {
@@ -78,8 +120,17 @@ void NodeEditorPanel::render(NodeGraph& graph, NodeId& selectedNodeId) {
                 ImVec2(node->editorPos.x, node->editorPos.y));
             m_positioned.insert(id);
         }
+        for (auto& c : graph.comments()) {
+            ned::SetNodePosition((ned::NodeId)c.id, ImVec2(c.editorPos.x, c.editorPos.y));
+            ned::SetGroupSize((ned::NodeId)c.id, ImVec2(c.size.x, c.size.y));
+            m_positioned.insert(c.id);
+        }
         m_firstFrame = false;
     }
+
+    // 先画注释框(位于节点之下, 作为背景标注), 再画节点
+    for (auto& c : graph.comments())
+        drawComment(c);
 
     // 绘制所有节点
     for (const auto& [id, node] : graph.nodes())
@@ -112,8 +163,16 @@ void NodeEditorPanel::render(NodeGraph& graph, NodeId& selectedNodeId) {
 
         ned::NodeId deletedNodeId;
         while (ned::QueryDeletedNode(&deletedNodeId))
-            if (ned::AcceptDeletedItem())
-                graph.removeNode((NodeId)deletedNodeId.Get());
+            if (ned::AcceptDeletedItem()) {
+                NodeId nid = (NodeId)deletedNodeId.Get();
+                // 注释框走独立 ID 段, 需路由到 removeComment; 否则按普通节点删除
+                if (graph.isComment(nid)) {
+                    graph.removeComment(nid);
+                    m_positioned.erase(nid);
+                } else {
+                    graph.removeNode(nid);
+                }
+            }
     }
     ned::EndDelete();
 
@@ -156,6 +215,19 @@ void NodeEditorPanel::render(NodeGraph& graph, NodeId& selectedNodeId) {
         node->editorPos = {pos.x, pos.y};
     }
 
+    // 注释框位置/尺寸同步（同节点逻辑）：新注释框首帧先按 editorPos+size 定位，
+    // 之后每帧读回位置持久化到 editorPos。
+    for (auto& c : graph.comments()) {
+        if (m_positioned.find(c.id) == m_positioned.end()) {
+            ned::SetNodePosition((ned::NodeId)c.id, ImVec2(c.editorPos.x, c.editorPos.y));
+            ned::SetGroupSize((ned::NodeId)c.id, ImVec2(c.size.x, c.size.y));
+            m_positioned.insert(c.id);
+            continue;
+        }
+        ImVec2 pos = ned::GetNodePosition((ned::NodeId)c.id);
+        c.editorPos = {pos.x, pos.y};
+    }
+
     // 复制/粘贴快捷键（Ctrl+C / Ctrl+V）。仅在编辑器获得焦点时响应。
     if (ned::GetSelectedObjectCount() >= 0) {
         ImGuiIO& io = ImGui::GetIO();
@@ -166,6 +238,38 @@ void NodeEditorPanel::render(NodeGraph& graph, NodeId& selectedNodeId) {
             auto ids = pasteClipboard(graph, {40.0f, 40.0f});
             m_pastePendingSelect = ids;
         }
+    }
+
+    // 双击注释框 → 进入标题编辑（打开 InputText 弹窗）。
+    ned::NodeId dbl = ned::GetDoubleClickedNode();
+    if (dbl && graph.isComment((NodeId)dbl.Get())) {
+        m_editingComment = (NodeId)dbl.Get();
+        if (auto* c = graph.getComment(m_editingComment)) {
+            std::strncpy(m_editBuf, c->text.c_str(), sizeof(m_editBuf) - 1);
+            m_editBuf[sizeof(m_editBuf) - 1] = '\0';
+        }
+        m_editJustOpened = true;
+    }
+    if (m_editingComment != INVALID_NODE) {
+        ned::Suspend();
+        if (m_editJustOpened) {
+            ImGui::OpenPopup("EditCommentTitle");
+            m_editJustOpened = false;
+        }
+        if (ImGui::BeginPopup("EditCommentTitle")) {
+            ImGui::TextUnformatted("Comment");
+            ImGui::SetNextItemWidth(240.0f);
+            ImGui::SetKeyboardFocusHere();
+            bool done = ImGui::InputText("##ctext", m_editBuf, sizeof(m_editBuf),
+                                         ImGuiInputTextFlags_EnterReturnsTrue);
+            if (auto* c = graph.getComment(m_editingComment))
+                c->text = m_editBuf;
+            if (done) ImGui::CloseCurrentPopup();
+            ImGui::EndPopup();
+        } else {
+            m_editingComment = INVALID_NODE;
+        }
+        ned::Resume();
     }
 
     // 右键菜单
@@ -264,6 +368,10 @@ void NodeEditorPanel::handleContextMenu(NodeGraph& graph) {
             graph.addNode(NodeType::Spine, canvasPos);
         if (ImGui::MenuItem("Add Frond"))
             graph.addNode(NodeType::Frond, canvasPos);
+
+        ImGui::Separator();
+        if (ImGui::MenuItem("Add Comment"))
+            graph.addComment(canvasPos);
 
         ImGui::Separator();
         bool hasSel = ned::GetSelectedObjectCount() > 0;

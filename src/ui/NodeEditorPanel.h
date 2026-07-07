@@ -23,6 +23,7 @@ private:
     // 节点颜色
     static ImVec4 nodeColor(NodeType type);
     void drawNode(const TreeNode* node);
+    void drawComment(CommentFrame& c);   // 绘制注释框(Group)及顶部可编辑标题
     void handleContextMenu(NodeGraph& graph);
 
     // ---- 复制/粘贴剪贴板 ----
@@ -44,4 +45,8 @@ private:
     std::unordered_set<NodeId> m_positioned;
     // 画布空间下的右键新增位置(由背景右键菜单记录)
     glm::vec2 m_contextCanvasPos = {0.0f, 0.0f};
+    // 正在编辑标题的注释框 id(双击进入)，INVALID_NODE 表示无
+    NodeId m_editingComment = INVALID_NODE;
+    char   m_editBuf[256] = {0};
+    bool   m_editJustOpened = false;
 };

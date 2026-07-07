@@ -26,6 +26,15 @@ struct Link {
     PinId  toPin   = INVALID_PIN;  // 下游节点输入Pin
 };
 
+// 注释框(类 UE/SD 的 Comment/Group): 纯编辑器标注, 不参与树生成。
+// 可框住一片节点, 顶部有可编辑的大标题。使用独立 ID 段避免与节点/Pin/连线冲突。
+struct CommentFrame {
+    NodeId    id    = INVALID_NODE;
+    std::string text = "Comment";
+    glm::vec2 editorPos = {0.0f, 0.0f};
+    glm::vec2 size      = {320.0f, 180.0f};
+};
+
 // 抽象节点基类
 class TreeNode {
 public:
@@ -80,14 +89,24 @@ public:
     // 便捷：添加子节点并自动连线到parent的outputPin
     NodeId addChildNode(NodeId parentId, NodeType type);
 
+    // ---- 注释框(编辑器标注, 不影响生成, 不置 dirty) ----
+    NodeId addComment(glm::vec2 pos = {0.0f, 0.0f});
+    void   removeComment(NodeId id);
+    std::vector<CommentFrame>&       comments()       { return m_comments; }
+    const std::vector<CommentFrame>& comments() const { return m_comments; }
+    CommentFrame* getComment(NodeId id);
+    bool   isComment(NodeId id) const;
+
 private:
     std::unordered_map<NodeId, std::unique_ptr<TreeNode>> m_nodes;
     std::vector<Link> m_links;
+    std::vector<CommentFrame> m_comments;
     // imgui-node-editor 中 Node/Pin/Link 共用同一 ID 空间，
     // 三者必须互不重叠，否则会触发 ID 冲突且节点无法拖动。
     NodeId   m_nextNodeId = 1;
     PinId    m_nextPinId  = 10000;
     LinkId   m_nextLinkId = 100000;
+    NodeId   m_nextCommentId = 1000000;  // 注释框独立 ID 段(与 node/pin/link 互不重叠)
     bool     m_dirty      = true;
 
     // Pin -> owner node，用于反查
