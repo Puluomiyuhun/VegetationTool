@@ -69,6 +69,16 @@ void PropertyPanel::render(NodeId selectedNodeId, NodeGraph& graph) {
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.15f,0.42f,0.08f,1.0f));
     addChildBtn("+ Leaf", NodeType::LeafCluster);
     ImGui::PopStyleColor();
+    ImGui::SameLine();
+
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f,0.40f,0.16f,1.0f));
+    addChildBtn("+ Spine", NodeType::Spine);
+    ImGui::PopStyleColor();
+    ImGui::SameLine();
+
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.14f,0.50f,0.10f,1.0f));
+    addChildBtn("+ Frond", NodeType::Frond);
+    ImGui::PopStyleColor();
 
     ImGui::End();
 }

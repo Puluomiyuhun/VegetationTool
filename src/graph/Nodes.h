@@ -63,3 +63,27 @@ public:
     std::unique_ptr<TreeNode> clone() const override { return std::make_unique<LeafClusterNode>(*this); }
     void copyParamsFrom(const TreeNode* o) override { if (auto* p = dynamic_cast<const LeafClusterNode*>(o)) params = p->params; }
 };
+
+// ---- Spine ----
+class SpineNode : public TreeNode {
+public:
+    SpineParams params;
+    SpineNode();
+    NodeType    getType()  const override { return NodeType::Spine; }
+    const char* getLabel() const override { return "Spine"; }
+    bool        drawProperties() override;
+    std::unique_ptr<TreeNode> clone() const override { return std::make_unique<SpineNode>(*this); }
+    void copyParamsFrom(const TreeNode* o) override { if (auto* p = dynamic_cast<const SpineNode*>(o)) params = p->params; }
+};
+
+// ---- Frond ----
+class FrondNode : public TreeNode {
+public:
+    FrondParams params;
+    FrondNode();
+    NodeType    getType()  const override { return NodeType::Frond; }
+    const char* getLabel() const override { return "Frond"; }
+    bool        drawProperties() override;
+    std::unique_ptr<TreeNode> clone() const override { return std::make_unique<FrondNode>(*this); }
+    void copyParamsFrom(const TreeNode* o) override { if (auto* p = dynamic_cast<const FrondNode*>(o)) params = p->params; }
+};

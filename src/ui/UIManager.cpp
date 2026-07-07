@@ -205,7 +205,7 @@ void UIManager::render(NodeGraph& graph, NodeId& selectedNodeId,
             if (ImGui::MenuItem("Open Project...")) {
                 std::string path = projectFileDialog(false);
                 if (!path.empty()) {
-                    if (ProjectIO::load(graph, path)) {
+                    if (ProjectIO::load(graph, path, &renderer.lighting)) {
                         selectedNodeId = INVALID_NODE;
                         m_nodeEditor.requestReposition();
                     }
@@ -213,7 +213,7 @@ void UIManager::render(NodeGraph& graph, NodeId& selectedNodeId,
             }
             if (ImGui::MenuItem("Save Project...")) {
                 std::string path = projectFileDialog(true);
-                if (!path.empty()) ProjectIO::save(graph, path);
+                if (!path.empty()) ProjectIO::save(graph, path, &renderer.lighting);
             }
             ImGui::EndMenu();
         }

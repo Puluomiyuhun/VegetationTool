@@ -11,18 +11,22 @@ An open-source, node-based vegetation generation tool inspired by SpeedTree — 
 ## ✨ Features
 
 ### Node Graph Editor
-- **4 node types**: Trunk → Branch → Twig → LeafCluster
+- **7 node types**: Trunk, Roots, Branch, Twig, LeafCluster, and **Spine → Frond** (ferns)
 - Drag-and-drop node connections (imgui-node-editor)
 - Right-click context menu to add nodes
 - One-click **Add Child Node** buttons in the Properties panel
 - Node positions persist across parameter edits
+- Copy / paste selected nodes; multiple independent plants per project
 
 ### Tree Generation
-- **Kinked / segmented bending** (`Bend Count` + `Bend Angle`) for gnarled, aged-tree aesthetics
+- **Natural growth** via noise perturbation + spiral gnarl + non-linear taper
+- **Roots** node: radial buttress roots flaring from the trunk base, welded to the trunk surface
+- **Spine + Frond** nodes for ferns: Spine builds a curved guide line, Frond extrudes a continuous curved fern-leaf strip along it (profile-varying width, curl, serrated edges)
+- **Joint bulge** (`Joint Count` + `Joint Bulge`) for bamboo-style periodic swelling
 - Branches and twigs attach to the *actual curved surface* of their parent — no floating geometry
+- Flare-projection "collar" welds child bases smoothly onto the parent surface
 - Parallel Transport Frame (PTF) for twist-free cylinder cross-sections
 - Golden-angle (137.5°) azimuth distribution for natural branch spacing
-- Fibonacci upper-hemisphere distribution for leaf clusters
 - Per-node geometry controls: radius, length, spread angle, gravity, sides, segments, seed
 
 ### PBR Rendering (OpenGL 3.3 Core)
@@ -36,8 +40,16 @@ An open-source, node-based vegetation generation tool inspired by SpeedTree — 
 ### Viewport
 - Orbit camera (left-drag = rotate, middle-drag = pan, scroll = zoom)
 - Wireframe toggle
+- MSAA anti-aliasing (Off / 2x / 4x / 8x)
+- Shadow-map self-shadowing
+- SpeedTree-style gradient sky background
 - Real-time regeneration on any parameter change
-- **Lighting panel**: adjust light direction, light color, sky ambient, ground ambient
+- **Lighting panel**: light direction/color/intensity, ambient, exposure, sky gradient, shadow controls
+
+### Project Files (`.vtree`)
+- Plain-text, line-based format (no third-party JSON dependency)
+- Saves the full node graph, per-node parameters, and material/texture paths
+- **Lighting & scene settings are saved alongside the graph** (backward-compatible: older files without a lighting block keep defaults)
 
 ---
 
@@ -114,18 +126,21 @@ E:\VegetationTool\build\Release\VegetationTool.exe
 ### Basic Workflow
 1. Launch — a default **Trunk → Branch → Twig → LeafCluster** chain is created
 2. Click a node to select it and edit its parameters in the **Properties** panel
-3. Use **+ Branch / + Twig / + Leaf** buttons to add child nodes with auto-wiring
+3. Use **+ Branch / + Roots / + Twig / + Leaf / + Spine / + Frond** buttons to add child nodes with auto-wiring
 4. Right-click the canvas to add free-standing nodes; drag from `Out →` to `→ In` to connect
 5. Delete selected nodes/links with **Delete** key
 
 ### Node Parameters
 | Parameter | Description |
 |-----------|-------------|
-| Bend Count | Number of hard kink segments (0 = straight) |
-| Bend Angle | Max angle per kink in degrees — higher = more gnarled |
+| Noise Amount / Freq | Organic centerline perturbation strength & frequency |
+| Gnarl | Spiral twist applied along the length |
+| Taper Power | Non-linear radius falloff from base to tip |
+| Joint Count / Bulge | Periodic swelling (bamboo nodes) |
 | Spread Angle | Branch divergence from parent axis |
 | Gravity | Downward droop weight |
 | Rotate Offset | Azimuth step between branches (137.5° = golden angle) |
+| Region Start / End | Restrict child growth to a span of the parent |
 | Seed | Random seed for reproducible variation |
 
 ### PBR Texture Maps
@@ -148,7 +163,7 @@ Click the **×** button to clear a texture and revert to the uniform color value
 - [ ] Unreal Engine 5 plugin / MCP integration
 - [ ] Procedural bark / leaf texture generation
 - [ ] Branch profile curves (SpeedTree-style curve editor)
-- [ ] Save / load node graph (JSON)
+- [x] Save / load node graph + lighting/scene settings (`.vtree`)
 
 ---
 

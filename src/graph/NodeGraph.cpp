@@ -1,5 +1,6 @@
 #include "NodeGraph.h"
 #include "Nodes.h"
+#include "../io/ProjectIO.h"
 #include <algorithm>
 #include <stdexcept>
 
@@ -10,6 +11,8 @@ static std::unique_ptr<TreeNode> makeNode(NodeType type) {
         case NodeType::Branch:      return std::make_unique<BranchNode>();
         case NodeType::Twig:        return std::make_unique<TwigNode>();
         case NodeType::LeafCluster: return std::make_unique<LeafClusterNode>();
+        case NodeType::Spine:       return std::make_unique<SpineNode>();
+        case NodeType::Frond:       return std::make_unique<FrondNode>();
     }
     return nullptr;
 }
@@ -157,18 +160,8 @@ void NodeGraph::clear() {
 }
 
 void NodeGraph::buildDefaultTemplate() {
-    clear();
-
-    NodeId trunk  = addNode(NodeType::Trunk,       {100.0f, 200.0f});
-    NodeId branch = addNode(NodeType::Branch,      {320.0f, 200.0f});
-    NodeId twig   = addNode(NodeType::Twig,        {540.0f, 200.0f});
-    NodeId leaf   = addNode(NodeType::LeafCluster, {760.0f, 200.0f});
-
-    addLink(m_nodes[trunk]->outputPin.id,  m_nodes[branch]->inputPins[0].id);
-    addLink(m_nodes[branch]->outputPin.id, m_nodes[twig]->inputPins[0].id);
-    addLink(m_nodes[twig]->outputPin.id,   m_nodes[leaf]->inputPins[0].id);
-
-    m_dirty = true;
+    // 加载内置默认工程(HelloTree)，给用户一个像样的初始效果
+    ProjectIO::loadDefaultTemplate(*this);
 }
 
 NodeId NodeGraph::addChildNode(NodeId parentId, NodeType type) {

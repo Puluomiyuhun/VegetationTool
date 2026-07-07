@@ -44,6 +44,16 @@ private:
         const std::vector<BranchRing>* parentRings,
         glm::vec3 origin, glm::vec3 dir);
 
+    // Spine：像细枝一样生成一条弯曲叶轴中心线，渲染成细茎并把 rings 传给 Frond 子节点
+    void buildSpine(const SpineNode* node, const NodeGraph& graph,
+        const std::vector<BranchRing>& parentRings,
+        float parentLen, int depth);
+
+    // Frond：沿父级(Spine)rings 铺一条连续带状蕨叶网格，宽度按叶形轮廓变化
+    void buildFrond(const FrondNode* node,
+        const std::vector<BranchRing>* parentRings,
+        glm::vec3 origin, glm::vec3 dir);
+
     // 从rings按比例t(0-1)插值出附着点、切线方向、right轴、半径
     static void sampleRings(const std::vector<BranchRing>& rings, float t,
         glm::vec3& outPos, glm::vec3& outDir, glm::vec3& outRight,
@@ -63,5 +73,7 @@ private:
                       glm::vec3 parentC, glm::vec3 parentA, float parentR,
                       glm::vec3 childBase, glm::vec3 childDir, glm::vec3 childRight,
                       float startR, float baseFlare, int sides,
-                      float uvTiling, float branchTotalLen);
+                      float uvTiling, float branchTotalLen,
+                      const std::vector<BranchRing>* trunkRings = nullptr,
+                      float collarSink = 0.0f);
 };

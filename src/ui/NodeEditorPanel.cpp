@@ -14,6 +14,8 @@ ImVec4 NodeEditorPanel::nodeColor(NodeType type) {
         case NodeType::Branch:      return {0.35f, 0.22f, 0.08f, 1.0f};
         case NodeType::Twig:        return {0.28f, 0.18f, 0.05f, 1.0f};
         case NodeType::LeafCluster: return {0.15f, 0.45f, 0.08f, 1.0f};
+        case NodeType::Spine:       return {0.20f, 0.40f, 0.16f, 1.0f};
+        case NodeType::Frond:       return {0.14f, 0.50f, 0.10f, 1.0f};
     }
     return {0.3f,0.3f,0.3f,1.0f};
 }
@@ -234,6 +236,10 @@ void NodeEditorPanel::handleContextMenu(NodeGraph& graph) {
             graph.addNode(NodeType::Twig, canvasPos);
         if (ImGui::MenuItem("Add Leaf Cluster"))
             graph.addNode(NodeType::LeafCluster, canvasPos);
+        if (ImGui::MenuItem("Add Spine"))
+            graph.addNode(NodeType::Spine, canvasPos);
+        if (ImGui::MenuItem("Add Frond"))
+            graph.addNode(NodeType::Frond, canvasPos);
 
         ImGui::Separator();
         bool hasSel = ned::GetSelectedObjectCount() > 0;
