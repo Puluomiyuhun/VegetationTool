@@ -218,9 +218,10 @@ void TreeGenerator::appendCollar(MeshBatch& batch,
 }
 
 // ---- 主入口 ----
-TreeMeshData TreeGenerator::generate(NodeGraph& graph) {
+TreeMeshData TreeGenerator::generate(NodeGraph& graph, NodeId hlNode) {
     TreeMeshData data;
     m_out = &data;
+    m_hlNode = hlNode;
     // 一个工程内可有多棵植被：每个"无输入连线的 Trunk"都是一株独立植物，
     // 各自按自身 posX/posZ 摆放到场景中。
     for (const auto& [id, node] : graph.nodes()) {
@@ -246,6 +247,17 @@ void TreeGenerator::processNode(
     float parentLen, int depth)
 {
     if (!node || depth > MAX_DEPTH) return;
+
+    // 若本节点是被选中的高亮节点: 记录进入前各 batch 的大小, 处理完(含整个子树)后
+    // 把新增的三角网位置镜像到高亮缓冲, 供视口画黄色线框。
+    bool isHl = (m_hlNode != INVALID_NODE && node->id == m_hlNode);
+    std::vector<size_t> vSnap, iSnap;
+    if (isHl) {
+        vSnap.reserve(m_out->batches.size());
+        iSnap.reserve(m_out->batches.size());
+        for (auto& b : m_out->batches) { vSnap.push_back(b.vertices.size()); iSnap.push_back(b.indices.size()); }
+    }
+
     switch (node->getType()) {
     case NodeType::Trunk: {
         auto rings = buildTrunk(static_cast<const TrunkNode*>(node), origin, dir);
@@ -279,6 +291,24 @@ void TreeGenerator::processNode(
     case NodeType::Frond:
         buildFrond(static_cast<const FrondNode*>(node), parentRings, origin, dir);
         break;
+    }
+
+    if (isHl) {
+        for (size_t bi = 0; bi < m_out->batches.size(); ++bi) {
+            auto& b = m_out->batches[bi];
+            int stride = b.isLeaf ? 11 : 8;
+            size_t vFrom = (bi < vSnap.size()) ? vSnap[bi] : 0;  // 处理前的顶点 float 数
+            size_t iFrom = (bi < iSnap.size()) ? iSnap[bi] : 0;
+            size_t localVBase = vFrom / stride;                  // 处理前该 batch 的顶点数
+            uint32_t hlBase = (uint32_t)(m_out->hlVerts.size() / 3);
+            for (size_t v = vFrom; v + 2 < b.vertices.size(); v += stride) {
+                m_out->hlVerts.push_back(b.vertices[v]);
+                m_out->hlVerts.push_back(b.vertices[v+1]);
+                m_out->hlVerts.push_back(b.vertices[v+2]);
+            }
+            for (size_t k = iFrom; k < b.indices.size(); ++k)
+                m_out->hlIdx.push_back(hlBase + (b.indices[k] - (uint32_t)localVBase));
+        }
     }
 }
 
@@ -328,21 +358,44 @@ void TreeGenerator::buildBranches(
     std::uniform_real_distribution<float> jitter(-5.0f, 5.0f);
     std::uniform_real_distribution<float> jitterLen(0.85f, 1.15f);
 
-    for (int i = 0; i < p.branchCount; ++i) {
-        // 从父节点rings按attachT取附着点，限制在[regionStart,regionEnd]区间内，
-        // 父级太底部/太顶部区域不长枝条
-        float rs = std::clamp(p.regionStart, 0.0f, 1.0f);
-        float re = std::clamp(p.regionEnd,   0.0f, 1.0f);
-        if (re < rs) std::swap(rs, re);
-        float attachT = (p.branchCount > 1)
-            ? glm::mix(rs, re, (float)i / (float)(p.branchCount-1))
-            : glm::mix(rs, re, 0.5f);
+    float rs = std::clamp(p.regionStart, 0.0f, 1.0f);
+    float re = std::clamp(p.regionEnd,   0.0f, 1.0f);
+    if (re < rs) std::swap(rs, re);
+
+    // 依据分布模式生成 (attachT归一化位置, 方位角az) 列表:
+    //  - Interval(竹节式): 沿[rs,re]每隔 intervalSpacing 设一个节, 每节环绕 branchesPerNode 根,
+    //    枝条只长在离散的节上(竹子特征);
+    //  - 其它模式: 沿区间均匀铺 branchCount 根(现有 Classic 行为)。
+    struct Attach { float t; float az; };
+    std::vector<Attach> attaches;
+    if (p.mode == BranchMode::Interval) {
+        float spacing = std::max(0.01f, p.intervalSpacing);
+        int   perNode = std::max(1, p.branchesPerNode);
+        int   nodeIdx = 0;
+        for (float t = rs; t <= re + 1e-4f; t += spacing, ++nodeIdx) {
+            float baseAz = nodeIdx * p.rotateOffset;  // 逐节整体旋转, 避免上下枝条对齐成一条线
+            for (int k = 0; k < perNode; ++k) {
+                float az = baseAz + (360.0f / perNode) * k + jitter(rng);
+                attaches.push_back({ std::min(t, re), az });
+            }
+        }
+    } else {
+        for (int i = 0; i < p.branchCount; ++i) {
+            float attachT = (p.branchCount > 1)
+                ? glm::mix(rs, re, (float)i / (float)(p.branchCount-1))
+                : glm::mix(rs, re, 0.5f);
+            attaches.push_back({ attachT, i * p.rotateOffset + jitter(rng) });
+        }
+    }
+
+    for (const auto& at : attaches) {
+        float attachT = at.t;
 
         glm::vec3 attachPos, attachDir, attachRight;
         float     attachRadius = p.radiusScale;
         sampleRings(parentRings, attachT, attachPos, attachDir, attachRight, attachRadius);
 
-        float az = i * p.rotateOffset + jitter(rng);
+        float az = at.az;
         float el = p.spreadAngle + jitter(rng);
 
         // 以attachDir为轴向、attachRight为参考，计算分支方向
@@ -350,6 +403,8 @@ void TreeGenerator::buildBranches(
         branchDir = rotateAroundAxis(branchDir, attachDir, az);
 
         float thisLen = branchLen * jitterLen(rng);
+        // Size Falloff: 沿父级向上(attachT 越大)长度线性衰减, 让树冠上部枝条更短
+        thisLen *= std::max(0.05f, 1.0f - p.sizeFalloff * attachT);
         // start半径贴合父级附着点，end按自身锥度收缩
         float startR = attachRadius * p.radiusScale;
         float endR   = startR * p.endRatio;

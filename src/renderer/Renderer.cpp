@@ -61,6 +61,7 @@ void Renderer::shutdown() {
     m_texCache.clear();
     m_gridMesh.destroy();
     m_groundMesh.destroy();
+    m_hlMesh.destroy();
 }
 
 // 按路径缓存纹理：命中则直接复用，未命中才从磁盘加载一次。
@@ -100,6 +101,14 @@ void Renderer::uploadTreeMesh(const TreeMeshData& data) {
         gb.texOpacity   = getTexture(batch.material.opacityTex,   false);
 
         m_batches.push_back(std::move(gb));
+    }
+
+    // 高亮线框网格(选中节点子树): 仅位置, 用 grid shader 以黄色线框叠加渲染
+    m_hlMesh.destroy();
+    m_hlIndexCount = 0;
+    if (!data.hlVerts.empty() && !data.hlIdx.empty()) {
+        m_hlMesh.create(data.hlVerts, data.hlIdx, {3});
+        m_hlIndexCount = (int)data.hlIdx.size();
     }
 
     computeSceneBounds(data);
@@ -279,6 +288,25 @@ void Renderer::render(const OrbitCamera& camera, float aspect, bool wireframe) {
     // 地面在植被之后绘制: 半透明混合, 让埋在地下(被地面遮挡)的植被透出来
     if (lighting.groundEnabled)
         renderGround(vp, camera.position());
+
+    // 选中节点高亮线框(黄色叠加): 关闭深度测试, 让高亮始终浮在模型之上
+    renderHighlight(vp);
+}
+
+// 选中节点及其子树的黄色线框叠加(类 SpeedTree 选中高亮)。
+// 复用 grid shader(仅位置+uViewProjection+uColor), 以线框模式绘制, 关闭深度测试浮于模型上。
+void Renderer::renderHighlight(const glm::mat4& vp) {
+    if (!m_hlMesh.valid() || m_hlIndexCount == 0) return;
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_CULL_FACE);
+    glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+    m_gridShader.use();
+    m_gridShader.setMat4("uViewProjection", glm::value_ptr(vp));
+    m_gridShader.setVec3("uColor", 1.0f, 0.9f, 0.05f);   // 明黄色
+    m_hlMesh.draw();
+    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+    glEnable(GL_CULL_FACE);
+    glEnable(GL_DEPTH_TEST);
 }
 
 void Renderer::buildGrid() {

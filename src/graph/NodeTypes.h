@@ -69,12 +69,17 @@ struct BranchParams {
     float gravity      = 0.18f;
     float regionStart  = 0.2f;   // 在父级[start,end]区间内生长, 此区间外的枝条剔除
     float regionEnd    = 0.95f;
+    float sizeFalloff   = 0.0f;  // 沿父级向上的长度衰减[0,1]: 越靠上的枝条越短(0=不衰减)
     float noiseAmount  = 30.0f;  // 样条噪声扰动强度(度)
     float noiseFreq    = 3.0f;   // 噪声频率
     float gnarl        = 10.0f;  // 螺旋扭曲总角度(度)
     int   jointCount   = 0;      // 竹节数(0=无节): 用于竹类分枝的周期性膨大
     float jointBulge   = 0.0f;   // 竹节膨大幅度(半径倍增比例)
     int   branchCount  = 4;
+    // Interval 模式(竹节式): 在父级[regionStart,regionEnd]内每隔 intervalSpacing(归一化间距)
+    // 设一个"节", 每个节上环绕生长 branchesPerNode 根枝条(竹枝只长在竹节上)。
+    float intervalSpacing  = 0.12f; // 相邻节的归一化间距(占父级长度比例)
+    int   branchesPerNode  = 2;     // 每个节上环绕生长的枝条数
     int   sides        = 6;
     int   lengthSegs   = 6;
     int   seed         = 2;

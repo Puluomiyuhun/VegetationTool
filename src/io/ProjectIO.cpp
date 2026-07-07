@@ -110,11 +110,14 @@ void writeNode(std::ostream& o, const TreeNode* n) {
         o << "rotateOffset "<< p.rotateOffset<< '\n';
         o << "gravity "     << p.gravity     << '\n';
         o << "regionStart " << p.regionStart << '\n';
+        o << "sizeFalloff " << p.sizeFalloff << '\n';
         o << "regionEnd "   << p.regionEnd   << '\n';
         o << "noiseAmount " << p.noiseAmount << '\n';
         o << "noiseFreq "   << p.noiseFreq   << '\n';
         o << "gnarl "       << p.gnarl       << '\n';
         o << "branchCount " << p.branchCount << '\n';
+        o << "intervalSpacing " << p.intervalSpacing << '\n';
+        o << "branchesPerNode " << p.branchesPerNode << '\n';
         o << "jointCount "  << p.jointCount  << '\n';
         o << "jointBulge "  << p.jointBulge  << '\n';
         o << "sides "       << p.sides       << '\n';
@@ -297,8 +300,11 @@ void applyParams(TreeNode* n, const KV& kv) {
         p.taperPow=getF(kv,"taperPow",p.taperPow); p.spreadAngle=getF(kv,"spreadAngle",p.spreadAngle);
         p.rotateOffset=getF(kv,"rotateOffset",p.rotateOffset); p.gravity=getF(kv,"gravity",p.gravity);
         p.regionStart=getF(kv,"regionStart",p.regionStart); p.regionEnd=getF(kv,"regionEnd",p.regionEnd);
+        p.sizeFalloff=getF(kv,"sizeFalloff",p.sizeFalloff);
         p.noiseAmount=getF(kv,"noiseAmount",p.noiseAmount); p.noiseFreq=getF(kv,"noiseFreq",p.noiseFreq);
         p.gnarl=getF(kv,"gnarl",p.gnarl); p.branchCount=getI(kv,"branchCount",p.branchCount);
+        p.intervalSpacing=getF(kv,"intervalSpacing",p.intervalSpacing);
+        p.branchesPerNode=getI(kv,"branchesPerNode",p.branchesPerNode);
         p.jointCount=getI(kv,"jointCount",p.jointCount); p.jointBulge=getF(kv,"jointBulge",p.jointBulge);
         p.sides=getI(kv,"sides",p.sides); p.lengthSegs=getI(kv,"lengthSegs",p.lengthSegs);
         p.seed=getI(kv,"seed",p.seed);

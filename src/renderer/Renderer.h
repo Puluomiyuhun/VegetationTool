@@ -23,7 +23,10 @@ struct MeshBatch {
 
 struct TreeMeshData {
     std::vector<MeshBatch> batches;
-    void clear() { batches.clear(); }
+    // 高亮几何(仅位置, 3 floats/顶点): 选中节点及其子树的三角网, 用于视口黄色线框叠加。
+    std::vector<float>    hlVerts;
+    std::vector<uint32_t> hlIdx;
+    void clear() { batches.clear(); hlVerts.clear(); hlIdx.clear(); }
 };
 
 struct LightingParams {
@@ -83,6 +86,8 @@ private:
     Shader m_groundShader;  // 地面(接收投影)
     Mesh   m_gridMesh;
     Mesh   m_groundMesh;    // 地面平面
+    Mesh   m_hlMesh;        // 选中节点高亮线框(仅位置)
+    int    m_hlIndexCount = 0;
     GLuint m_skyVao = 0;   // 空 VAO，用于全屏三角形(顶点由 gl_VertexID 生成)
 
     // ---- 阴影贴图 ----
@@ -105,4 +110,5 @@ private:
     void renderGrid(const glm::mat4& vp);
     void renderGround(const glm::mat4& vp, const glm::vec3& camPos);
     void renderSky(const OrbitCamera& camera, float aspect);
+    void renderHighlight(const glm::mat4& vp);   // 选中节点子树黄色线框叠加
 };

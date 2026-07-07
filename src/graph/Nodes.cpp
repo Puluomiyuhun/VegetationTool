@@ -122,10 +122,17 @@ bool BranchNode::drawProperties() {
             params.mode = (BranchMode)modeIdx;
             changed = true;
         }
-        changed |= ImGui::SliderInt  ("Branch Count",  &params.branchCount,  1, 8);
+        if (params.mode == BranchMode::Interval) {
+            // Interval(竹节式): 枝条只长在固定间距的节上
+            changed |= ImGui::SliderFloat("Interval Spacing", &params.intervalSpacing, 0.02f, 0.5f);
+            changed |= ImGui::SliderInt  ("Branches / Node",  &params.branchesPerNode, 1, 6);
+        } else {
+            changed |= ImGui::SliderInt  ("Branch Count",  &params.branchCount,  1, 8);
+        }
         changed |= ImGui::SliderFloat("Rotate Offset", &params.rotateOffset, 0.0f, 360.0f);
         changed |= ImGui::SliderFloat("Region Start",  &params.regionStart,  0.0f, 1.0f);
         changed |= ImGui::SliderFloat("Region End",    &params.regionEnd,    0.0f, 1.0f);
+        changed |= ImGui::SliderFloat("Size Falloff",  &params.sizeFalloff,  0.0f, 1.0f);
         changed |= ImGui::SliderInt  ("Seed",          &params.seed,         0, 999);
     }
     // Spine：单根枝条形态 —— 长度、粗细、下垂、弯曲

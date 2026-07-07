@@ -8,10 +8,12 @@
 
 class TreeGenerator {
 public:
-    TreeMeshData generate(NodeGraph& graph);
+    // hlNode: 需要在视口高亮的节点(该节点及其子树的几何会被镜像到 hlVerts/hlIdx)
+    TreeMeshData generate(NodeGraph& graph, NodeId hlNode = INVALID_NODE);
 
 private:
     TreeMeshData* m_out = nullptr;
+    NodeId        m_hlNode = INVALID_NODE;   // 被选中的高亮节点
 
     MeshBatch& getBatch(const MaterialParams& mat, bool isLeaf);
 

@@ -107,10 +107,12 @@ void Application::run() {
 }
 
 void Application::update() {
-    if (m_graph.isDirty()) {
-        m_meshData = m_generator.generate(m_graph);
+    // 选中节点变化时也需重新生成(高亮几何随选中节点走)
+    if (m_graph.isDirty() || m_selectedNode != m_lastHlNode) {
+        m_meshData = m_generator.generate(m_graph, m_selectedNode);
         m_renderer.uploadTreeMesh(m_meshData);
         m_graph.clearDirty();
+        m_lastHlNode = m_selectedNode;
     }
 }
 

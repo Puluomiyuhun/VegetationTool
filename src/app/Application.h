@@ -23,6 +23,7 @@ private:
     Framebuffer    m_framebuffer;
     UIManager      m_ui;
     NodeId         m_selectedNode = INVALID_NODE;
+    NodeId         m_lastHlNode   = INVALID_NODE;   // 上次生成时的高亮节点(变化则重新生成)
     bool           m_wireframe    = false;
 
     void update();
