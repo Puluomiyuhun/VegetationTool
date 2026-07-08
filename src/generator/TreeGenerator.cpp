@@ -862,6 +862,55 @@ void TreeGenerator::buildFrond(
 
     // 逐 ring 生成一排横向顶点(共 rings.size() 行 × totalCols 列)
     glm::vec3 frondAnchor = rings.front().center;   // 叶带整体绕基部摆动
+
+    // 叶带曲面采样: (u,v)∈[0,1] → 世界坐标+法线。u=横向 lateral, v=沿脊线 t。
+    // 供轮廓网格(cutout)按叶带局部 UV 映射到实际曲面。
+    auto sampleFrond = [&](float u, float v, glm::vec3& outPos, glm::vec3& outN) {
+        float t = glm::clamp(v, 0.0f, 1.0f);
+        float f = t * (float)nSeg;
+        int   i0 = (int)std::floor(f);
+        i0 = std::max(0, std::min(nSeg - 1, i0));
+        float lerp = f - (float)i0;
+        const BranchRing& a = rings[i0];
+        const BranchRing& b = rings[i0 + 1];
+        glm::vec3 center = glm::mix(a.center, b.center, lerp);
+        glm::vec3 rightAxis = glm::normalize(glm::mix(glm::normalize(a.right), glm::normalize(b.right), lerp));
+        glm::vec3 upAxis    = glm::normalize(glm::mix(glm::normalize(a.up),    glm::normalize(b.up),    lerp));
+        glm::vec3 faceN = glm::normalize(glm::cross(rightAxis, upAxis));
+        float hw = halfWidthAt(t);
+        float lateral = u * 2.0f - 1.0f;   // [0,1] → [-1,1]
+        float lift = p.curl * hw * lateral * lateral;
+        outPos = center + rightAxis * (lateral * hw) + faceN * lift;
+        outN = faceN;
+    };
+
+    // 轮廓裁剪网格: 用贴合剪影的三角网格代替整片叶带矩形
+    if (p.useCutout && p.cutoutPoints.size() >= 3 && p.cutoutTris.size() >= 3) {
+        uint32_t base = (uint32_t)(batch.vertices.size() / 16);
+        for (const glm::vec2& q : p.cutoutPoints) {
+            glm::vec3 pos, faceN;
+            sampleFrond(q.x, q.y, pos, faceN);
+            float wFrond = m_windW * q.y;   // 尖端摆动更明显
+            batch.vertices.insert(batch.vertices.end(),
+                {pos.x,pos.y,pos.z, faceN.x,faceN.y,faceN.z, q.x, q.y,
+                 col.r,col.g,col.b,
+                 wFrond, m_windPhase,
+                 frondAnchor.x, frondAnchor.y, frondAnchor.z});
+        }
+        uint32_t vCount = (uint32_t)p.cutoutPoints.size();
+        for (size_t k = 0; k + 2 < p.cutoutTris.size(); k += 3) {
+            uint32_t ia = p.cutoutTris[k], ib = p.cutoutTris[k+1], ic = p.cutoutTris[k+2];
+            if (ia < vCount && ib < vCount && ic < vCount) {
+                batch.indices.insert(batch.indices.end(),
+                    {base+ia, base+ib, base+ic});     // 正面
+                batch.indices.insert(batch.indices.end(),
+                    {base+ia, base+ic, base+ib});     // 背面(双面可见)
+            }
+        }
+        afterAppend(batch, hlV, hlI);
+        return;
+    }
+
     std::vector<uint32_t> rowBase(rings.size());
     for (size_t ri = 0; ri < rings.size(); ++ri) {
         const BranchRing& r = rings[ri];

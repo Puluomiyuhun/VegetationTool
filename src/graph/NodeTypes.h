@@ -130,8 +130,9 @@ struct LeafClusterParams {
     // 点坐标为叶片局部 UV 空间[0,1](与四边形卡片相同的 U=横向, V=纵向, V=0 底 V=1 顶),
     // 生成时映射到每张叶卡的平面。cutoutTris 为三角形索引(每3个一组)。
     bool                   useCutout = false;    // 启用轮廓网格(需 cutoutTris 非空, 否则退回四边形)
-    std::vector<glm::vec2> cutoutPoints;         // 叶片 UV 顶点
+    std::vector<glm::vec2> cutoutPoints;         // 三角化后完整顶点(致密边界+内部撒点)
     std::vector<uint32_t>  cutoutTris;           // 三角形索引
+    std::vector<glm::vec2> cutoutRing;           // 可编辑边界环(仅编辑器用, 不参与生成)
     bool                   requestEditCutout = false;  // 瞬时: UI 点击"编辑轮廓"后置 true, 打开编辑器后清零
 };
 
@@ -198,6 +199,16 @@ struct FrondParams {
     float serrateDepth= 0.25f;  // 锯齿深度比例
     int   seed        = 7;
     MaterialParams material = {{0.16f,0.50f,0.07f}, 0.72f, 0.0f, 0.4f, 0.5f};
+
+    // ---- 轮廓裁剪网格(对标 SpeedTree Mesh Cutout) ----
+    // 与 LeafCluster 相同: 用贴合叶形的三角网格代替整块叶带矩形, 减少透明像素 overdraw。
+    // 点坐标为叶带局部 UV[0,1](U=横向 lateral, V=沿脊线 t, V=0 基部 V=1 梢部),
+    // 生成时映射到叶带曲面。cutoutTris 为三角形索引(每3个一组)。
+    bool                   useCutout = false;    // 启用轮廓网格(需 cutoutTris 非空, 否则退回整片叶带)
+    std::vector<glm::vec2> cutoutPoints;         // 三角化后完整顶点(致密边界+内部撒点)
+    std::vector<uint32_t>  cutoutTris;           // 三角形索引
+    std::vector<glm::vec2> cutoutRing;           // 可编辑边界环(仅编辑器用, 不参与生成)
+    bool                   requestEditCutout = false;  // 瞬时: UI 点击"编辑轮廓"后置 true, 打开编辑器后清零
 };
 
 // Export：模型导出节点。输入连接一个 Trunk, 代表该 Trunk 整棵树的模型。

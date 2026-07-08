@@ -175,6 +175,11 @@ void writeNode(std::ostream& o, const TreeNode* n) {
             for (uint32_t t : p.cutoutTris) o << ' ' << t;
             o << '\n';
         }
+        if (!p.cutoutRing.empty()) {
+            o << "cutoutRing " << p.cutoutRing.size();
+            for (const auto& q : p.cutoutRing) o << ' ' << q.x << ' ' << q.y;
+            o << '\n';
+        }
         writeMaterial(o, p.material);
         break;
     }
@@ -212,6 +217,22 @@ void writeNode(std::ostream& o, const TreeNode* n) {
         o << "serrate "     << (p.serrate ? 1 : 0) << '\n';
         o << "serrateDepth "<< p.serrateDepth<< '\n';
         o << "seed "        << p.seed        << '\n';
+        o << "useCutout "     << (p.useCutout ? 1 : 0) << '\n';
+        if (!p.cutoutPoints.empty()) {
+            o << "cutoutPoints " << p.cutoutPoints.size();
+            for (const auto& q : p.cutoutPoints) o << ' ' << q.x << ' ' << q.y;
+            o << '\n';
+        }
+        if (!p.cutoutTris.empty()) {
+            o << "cutoutTris " << p.cutoutTris.size();
+            for (uint32_t t : p.cutoutTris) o << ' ' << t;
+            o << '\n';
+        }
+        if (!p.cutoutRing.empty()) {
+            o << "cutoutRing " << p.cutoutRing.size();
+            for (const auto& q : p.cutoutRing) o << ' ' << q.x << ' ' << q.y;
+            o << '\n';
+        }
         writeMaterial(o, p.material);
         break;
     }
@@ -368,6 +389,12 @@ void applyParams(TreeNode* n, const KV& kv) {
                 p.cutoutTris.clear();
                 for (size_t i = 0; i < cnt; ++i) { uint32_t t = 0; ss >> t; p.cutoutTris.push_back(t); }
             }
+            std::string sr = getS(kv, "cutoutRing");
+            if (!sr.empty()) {
+                std::istringstream ss(sr); size_t cnt = 0; ss >> cnt;
+                p.cutoutRing.clear();
+                for (size_t i = 0; i < cnt; ++i) { glm::vec2 q; ss >> q.x >> q.y; p.cutoutRing.push_back(q); }
+            }
         }
         readMaterial(kv, p.material); break;
     }
@@ -393,6 +420,27 @@ void applyParams(TreeNode* n, const KV& kv) {
         p.curl=getF(kv,"curl",p.curl); p.segsPerSide=getI(kv,"segsPerSide",p.segsPerSide);
         p.serrate=getI(kv,"serrate",p.serrate?1:0)!=0; p.serrateDepth=getF(kv,"serrateDepth",p.serrateDepth);
         p.seed=getI(kv,"seed",p.seed);
+        p.useCutout=getI(kv,"useCutout",p.useCutout?1:0)!=0;
+        {
+            std::string sp = getS(kv, "cutoutPoints");
+            if (!sp.empty()) {
+                std::istringstream ss(sp); size_t cnt = 0; ss >> cnt;
+                p.cutoutPoints.clear();
+                for (size_t i = 0; i < cnt; ++i) { glm::vec2 q; ss >> q.x >> q.y; p.cutoutPoints.push_back(q); }
+            }
+            std::string st = getS(kv, "cutoutTris");
+            if (!st.empty()) {
+                std::istringstream ss(st); size_t cnt = 0; ss >> cnt;
+                p.cutoutTris.clear();
+                for (size_t i = 0; i < cnt; ++i) { uint32_t t = 0; ss >> t; p.cutoutTris.push_back(t); }
+            }
+            std::string sr = getS(kv, "cutoutRing");
+            if (!sr.empty()) {
+                std::istringstream ss(sr); size_t cnt = 0; ss >> cnt;
+                p.cutoutRing.clear();
+                for (size_t i = 0; i < cnt; ++i) { glm::vec2 q; ss >> q.x >> q.y; p.cutoutRing.push_back(q); }
+            }
+        }
         readMaterial(kv, p.material); break;
     }
     case NodeType::Export: {

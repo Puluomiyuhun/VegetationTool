@@ -238,13 +238,20 @@ void UIManager::render(NodeGraph& graph, NodeId& selectedNodeId,
     // Right: Properties
     m_property.render(selectedNodeId, graph);
 
-    // 叶片轮廓编辑器: 检测属性面板里"编辑轮廓"请求, 打开独立窗口
+    // 叶片轮廓编辑器: 检测属性面板里"编辑轮廓"请求, 打开独立窗口(LeafCluster / Frond 均支持)
     for (const auto& [id, node] : graph.nodes()) {
-        if (node->getType() != NodeType::LeafCluster) continue;
-        auto* lc = static_cast<LeafClusterNode*>(node.get());
-        if (lc->params.requestEditCutout) {
-            lc->params.requestEditCutout = false;
-            m_cutoutEditor.open(id);
+        if (node->getType() == NodeType::LeafCluster) {
+            auto* lc = static_cast<LeafClusterNode*>(node.get());
+            if (lc->params.requestEditCutout) {
+                lc->params.requestEditCutout = false;
+                m_cutoutEditor.open(id);
+            }
+        } else if (node->getType() == NodeType::Frond) {
+            auto* fr = static_cast<FrondNode*>(node.get());
+            if (fr->params.requestEditCutout) {
+                fr->params.requestEditCutout = false;
+                m_cutoutEditor.open(id);
+            }
         }
     }
     m_cutoutEditor.render(graph);

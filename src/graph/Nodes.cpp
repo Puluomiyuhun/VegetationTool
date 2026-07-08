@@ -342,6 +342,14 @@ bool FrondNode::drawProperties() {
         changed |= ImGui::SliderFloat("Serrate Depth",&params.serrateDepth, 0.0f, 0.8f);
         changed |= ImGui::SliderInt  ("Seed",         &params.seed,         0, 999);
     }
+    if (ImGui::CollapsingHeader("Cutout Mesh", ImGuiTreeNodeFlags_DefaultOpen)) {
+        // 轮廓裁剪网格: 用贴合剪影的三角网格代替整片叶带矩形, 降低透明像素 overdraw。
+        changed |= ImGui::Checkbox("Use Cutout Mesh", &params.useCutout);
+        if (ImGui::Button("Edit Cutout Mesh...")) params.requestEditCutout = true;
+        ImGui::SameLine();
+        ImGui::TextDisabled("(%d pts / %d tris)",
+            (int)params.cutoutPoints.size(), (int)params.cutoutTris.size() / 3);
+    }
     if (ImGui::CollapsingHeader("Material", ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui::PushID("mat_frond");
         changed |= drawMaterial(params.material, true);  // SSS for leaves
