@@ -2,8 +2,9 @@
 #include <glm/glm.hpp>
 #include <cstdint>
 #include <string>
+#include <vector>
 
-enum class NodeType { Trunk, Roots, Branch, Twig, LeafCluster, Spine, Frond };
+enum class NodeType { Trunk, Roots, Branch, Twig, LeafCluster, Spine, Frond, Export };
 
 // Branch 分布模式(对标 SpeedTree Generation Mode)。目前仅实现 Classic(=现有分布行为)，
 // 其余模式先占位保留枚举与序号, 待后续逐个实现。
@@ -118,10 +119,20 @@ struct LeafClusterParams {
     float       leafSize      = 0.22f;
     float       leafAspect    = 0.65f;  // 叶片宽/高比: 小值=细长叶(竹叶/蕨类小叶), 大值=宽叶
     float       normalJitter  = 0.35f;
+    float       normalSoften  = 0.0f;   // 叶片法线软化[0,1]: 0=平面卡片法线, 1=从叶簇轴心指向叶片的球形法线(树冠体积感/柔和受光)
     bool        planar        = false;  // true=平面羽状排列(蕨类叶轴两侧), false=黄金角3D辐射
     float       sizeFalloff   = 0.0f;   // 沿叶轴向梢部的缩小比例[0,1]: 蕨类小叶向尖端渐小
     int         seed          = 4;
     MaterialParams material = {{0.15f,0.48f,0.06f}, 0.75f, 0.0f, 0.4f, 0.45f};
+
+    // ---- 轮廓裁剪网格(对标 SpeedTree Mesh Cutout) ----
+    // 用一张贴合叶子剪影的三角网格代替整块四边形卡片, 大幅减少透明像素的 overdraw。
+    // 点坐标为叶片局部 UV 空间[0,1](与四边形卡片相同的 U=横向, V=纵向, V=0 底 V=1 顶),
+    // 生成时映射到每张叶卡的平面。cutoutTris 为三角形索引(每3个一组)。
+    bool                   useCutout = false;    // 启用轮廓网格(需 cutoutTris 非空, 否则退回四边形)
+    std::vector<glm::vec2> cutoutPoints;         // 叶片 UV 顶点
+    std::vector<uint32_t>  cutoutTris;           // 三角形索引
+    bool                   requestEditCutout = false;  // 瞬时: UI 点击"编辑轮廓"后置 true, 打开编辑器后清零
 };
 
 // 根系：从树干基部向外辐射铺开，再向下弯曲扎入地下，末端收细成尖。
@@ -187,4 +198,11 @@ struct FrondParams {
     float serrateDepth= 0.25f;  // 锯齿深度比例
     int   seed        = 7;
     MaterialParams material = {{0.16f,0.50f,0.07f}, 0.72f, 0.0f, 0.4f, 0.5f};
+};
+
+// Export：模型导出节点。输入连接一个 Trunk, 代表该 Trunk 整棵树的模型。
+// 点击导出按钮时, 把该 Trunk 子树网格写出为 OBJ 文件。不参与几何生成。
+struct ExportParams {
+    std::string path = "tree_export.obj";  // 导出文件路径
+    bool        requestExport = false;     // 瞬时标志: UI 点击后置 true, 导出完成清零
 };

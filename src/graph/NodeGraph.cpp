@@ -13,6 +13,7 @@ static std::unique_ptr<TreeNode> makeNode(NodeType type) {
         case NodeType::LeafCluster: return std::make_unique<LeafClusterNode>();
         case NodeType::Spine:       return std::make_unique<SpineNode>();
         case NodeType::Frond:       return std::make_unique<FrondNode>();
+        case NodeType::Export:      return std::make_unique<ExportNode>();
     }
     return nullptr;
 }

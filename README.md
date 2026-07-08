@@ -11,7 +11,7 @@ An open-source, node-based vegetation generation tool inspired by SpeedTree — 
 ## ✨ Features
 
 ### Node Graph Editor
-- **7 node types**: Trunk, Roots, Branch, Twig, LeafCluster, and **Spine → Frond** (ferns)
+- **8 node types**: Trunk, Roots, Branch, Twig, LeafCluster, **Spine → Frond** (ferns), and **Export**
 - Drag-and-drop node connections (imgui-node-editor)
 - Right-click context menu to add nodes
 - One-click **Add Child Node** buttons in the Properties panel
@@ -29,13 +29,27 @@ An open-source, node-based vegetation generation tool inspired by SpeedTree — 
 - Golden-angle (137.5°) azimuth distribution for natural branch spacing
 - Per-node geometry controls: radius, length, spread angle, gravity, sides, segments, seed
 
+### Leaf Mesh Cutout (SpeedTree-style)
+- Dedicated **Leaf Cutout Editor** window: trace a leaf silhouette on the texture and generate a tight triangle mesh card instead of a full quad — cutting transparent-pixel overdraw
+- **Manual mode**: click along the silhouette edge to place boundary points (drag to move, right-click to delete, scroll to zoom, middle-drag to pan) — ideal for atlases with many leaves on one mask
+- **Auto mode**: alpha-threshold marching-squares tracing → largest contour → Douglas-Peucker simplification → ear-clip triangulation
+- Boundary ring is ear-clipped into a triangle mesh mapped onto every leaf card; saved with the project
+
+### Wind Animation (vertex world-position offset, no bones)
+- **Global sway** + **branch flutter** on the branch shader; **per-leaf motion** hashed per anchor (frequency/amplitude/phase jitter) to avoid uniform swaying
+- Wind panel: direction, strength, and separate amount/frequency for global / branch / leaf
+
 ### PBR Rendering (OpenGL 3.3 Core)
 - **Branch/trunk shader**: GGX distribution + Smith geometry + Fresnel-Schlick BRDF
 - **Leaf shader**: double-sided normals, hemisphere ambient, SSS (subsurface scattering) backlight approximation
+- **Softened leaf normals**: blend flat-card normals toward a spherical cluster-axis normal for a fuller, softer-lit canopy
 - **Hemisphere ambient lighting** (sky color / ground color gradient, Valve-style)
 - Per-node **material settings**: Albedo, Roughness, Metallic, AO Strength, SSS Strength
-- **PBR texture maps** per node: BaseColor (sRGB), Roughness/Metallic (R/G channels), Normal Map (tangent-space)
+- **PBR texture maps** per node: BaseColor (sRGB), Roughness/Metallic (R/G channels), Normal Map (tangent-space), Opacity mask with alpha cutoff
 - Reinhard tonemapping + gamma 2.2
+
+### Mesh Export
+- **Export** node: connect a Trunk to write its whole tree out as a Wavefront **OBJ** (positions, normals, UVs)
 
 ### Viewport
 - Orbit camera (left-drag = rotate, middle-drag = pan, scroll = zoom)
@@ -45,6 +59,7 @@ An open-source, node-based vegetation generation tool inspired by SpeedTree — 
 - SpeedTree-style gradient sky background
 - Real-time regeneration on any parameter change
 - **Lighting panel**: light direction/color/intensity, ambient, exposure, sky gradient, shadow controls
+- **Wind panel**: enable/direction/strength plus global-sway, branch-flutter, and leaf-motion controls
 
 ### Project Files (`.vtree`)
 - Plain-text, line-based format (no third-party JSON dependency)
@@ -73,13 +88,15 @@ src/
 │   ├── Camera            Orbit camera
 │   └── Framebuffer       Off-screen FBO for viewport
 ├── shaders/
-│   ├── branch.vert/frag  PBR + optional texture maps
-│   ├── leaf.vert/frag    SSS + optional texture maps
+│   ├── branch.vert/frag  PBR + wind sway + optional texture maps
+│   ├── leaf.vert/frag    SSS + per-leaf wind + optional texture maps
+│   ├── depth.vert/frag   Shadow-map depth pass
 │   └── grid.vert/frag    Reference grid
 └── ui/
     ├── UIManager         Dockspace + panel orchestration
     ├── NodeEditorPanel   imgui-node-editor integration
     ├── PropertyPanel     Per-node parameter editing + Add Child
+    ├── LeafCutoutEditor  Leaf silhouette tracing → cutout mesh
     └── ViewportPanel     FBO display + camera input
 ```
 
@@ -155,11 +172,12 @@ Click the **×** button to clear a texture and revert to the uniform color value
 
 ## 🗺 Roadmap
 
-- [ ] Mesh export (FBX / OBJ / glTF)
+- [x] Mesh export (OBJ) — *FBX / glTF planned*
 - [ ] LOD generation
 - [ ] Skeletal animation support
 - [ ] Collision mesh generation
-- [ ] Wind simulation shader
+- [x] Wind animation (vertex world-position offset)
+- [x] Leaf mesh cutout editor (SpeedTree-style silhouette → mesh card)
 - [ ] Unreal Engine 5 plugin / MCP integration
 - [ ] Procedural bark / leaf texture generation
 - [ ] Branch profile curves (SpeedTree-style curve editor)

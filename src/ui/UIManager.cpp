@@ -1,5 +1,6 @@
 #include "UIManager.h"
 #include "io/ProjectIO.h"
+#include "graph/Nodes.h"
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
@@ -237,6 +238,17 @@ void UIManager::render(NodeGraph& graph, NodeId& selectedNodeId,
     // Right: Properties
     m_property.render(selectedNodeId, graph);
 
+    // 叶片轮廓编辑器: 检测属性面板里"编辑轮廓"请求, 打开独立窗口
+    for (const auto& [id, node] : graph.nodes()) {
+        if (node->getType() != NodeType::LeafCluster) continue;
+        auto* lc = static_cast<LeafClusterNode*>(node.get());
+        if (lc->params.requestEditCutout) {
+            lc->params.requestEditCutout = false;
+            m_cutoutEditor.open(id);
+        }
+    }
+    m_cutoutEditor.render(graph);
+
     // Lighting panel
     ImGui::Begin("Lighting");
     {
@@ -265,6 +277,25 @@ void UIManager::render(NodeGraph& graph, NodeId& selectedNodeId,
         ImGui::SeparatorText("Ground");
         ImGui::Checkbox("Enable Ground", &L.groundEnabled);
         ImGui::SliderFloat("Ground Opacity", &L.groundAlpha, 0.0f, 1.0f);
+    }
+    ImGui::End();
+
+    // Wind panel (顶点风力动画)
+    ImGui::Begin("Wind");
+    {
+        auto& W = renderer.wind;
+        ImGui::Checkbox("Enable Wind", &W.enabled);
+        ImGui::SliderFloat("Direction (deg)", &W.dirAngleDeg, 0.0f, 360.0f);
+        ImGui::SliderFloat("Strength",        &W.strength,    0.0f, 3.0f);
+        ImGui::SeparatorText("Global Sway");
+        ImGui::SliderFloat("Global Amount", &W.globalStrength, 0.0f, 1.0f);
+        ImGui::SliderFloat("Global Freq",   &W.globalFreq,     0.0f, 3.0f);
+        ImGui::SeparatorText("Branch Flutter");
+        ImGui::SliderFloat("Branch Amount", &W.branchStrength, 0.0f, 0.3f);
+        ImGui::SliderFloat("Branch Freq",   &W.branchFreq,     0.0f, 6.0f);
+        ImGui::SeparatorText("Leaf Motion");
+        ImGui::SliderFloat("Leaf Amount", &W.leafStrength, 0.0f, 0.8f);
+        ImGui::SliderFloat("Leaf Freq",   &W.leafFreq,     0.0f, 12.0f);
     }
     ImGui::End();
 

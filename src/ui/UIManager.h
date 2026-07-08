@@ -2,6 +2,7 @@
 #include "NodeEditorPanel.h"
 #include "ViewportPanel.h"
 #include "PropertyPanel.h"
+#include "LeafCutoutEditor.h"
 #include "renderer/Renderer.h"
 #include "renderer/Camera.h"
 #include "renderer/Framebuffer.h"
@@ -23,6 +24,7 @@ private:
     NodeEditorPanel m_nodeEditor;
     ViewportPanel   m_viewport;
     PropertyPanel   m_property;
+    LeafCutoutEditor m_cutoutEditor;
 
     void setupDockspace();
 };

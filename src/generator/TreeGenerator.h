@@ -11,11 +11,17 @@ public:
     // hlNode: 需要在视口高亮的节点(该节点及其子树的几何会被镜像到 hlVerts/hlIdx)
     TreeMeshData generate(NodeGraph& graph, NodeId hlNode = INVALID_NODE);
 
+    // 只生成 trunkId 这一株 Trunk 的整棵树网格(供 Export 节点导出单株模型使用)。
+    TreeMeshData generateSubtree(NodeGraph& graph, NodeId trunkId);
+
 private:
     TreeMeshData* m_out = nullptr;
     NodeId        m_hlNode = INVALID_NODE;   // 被选中的高亮节点
     bool          m_hlCapture = false;       // 当前是否正在生成被选中节点"自身"的几何
     NodeId        m_curNode = INVALID_NODE;  // 当前正在生成几何的节点(供拾取三角标记归属)
+    // 顶点风力烘焙: 当前节点的风力基权重与相位, 由 processNode 按节点类型/id 设置。
+    float         m_windW = 0.0f;     // 该节点枝条风力基权重(尖端处再乘 tRing)
+    float         m_windPhase = 0.0f; // 该节点相位偏移(按节点 id 哈希, 令相邻枝条不同步)
 
     MeshBatch& getBatch(const MaterialParams& mat, bool isLeaf);
 

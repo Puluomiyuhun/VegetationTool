@@ -12,8 +12,8 @@
 #include <unordered_map>
 
 // 单个材质批次（CPU侧）
-// branch 顶点格式: pos(3)+normal(3)+uv(2) = 8 floats
-// leaf   顶点格式: pos(3)+normal(3)+uv(2)+albedo(3) = 11 floats
+// branch 顶点格式: pos(3)+normal(3)+uv(2)+wind(2:weight,phase) = 10 floats
+// leaf   顶点格式: pos(3)+normal(3)+uv(2)+albedo(3)+wind(2:weight,phase)+anchor(3) = 16 floats
 struct MeshBatch {
     std::vector<float>    vertices;
     std::vector<uint32_t> indices;
@@ -55,6 +55,23 @@ struct LightingParams {
     float groundAlpha    = 0.85f;   // 地面不透明度: <1 让被遮挡的植被半透明透出
 };
 
+// 顶点风力动画参数(类 SpeedTree 顶点风)。三层叠加:
+//  1) 全局摆动(Global): 整树随高度比按 hr^2 加权左右摇摆
+//  2) 枝条颤动(Branch): 每顶点按烘焙权重+相位做正弦位移(尖端摆动大)
+//  3) 叶片摆动(Leaf):   叶片绕锚点(basePos)做小角度旋转(ripple/tumble)
+// 全部在顶点着色器完成, CPU 只上传少量 uniform + 时间。阴影 pass 不施加风力(静态)。
+struct WindParams {
+    bool  enabled        = true;
+    float dirAngleDeg    = 30.0f;   // 风向(绕Y轴, 度)
+    float strength       = 1.0f;    // 全局强度总倍增
+    float globalStrength = 0.18f;   // 全局摆动幅度
+    float globalFreq     = 0.9f;    // 全局摆动频率
+    float branchStrength = 0.06f;   // 枝条颤动幅度
+    float branchFreq     = 2.2f;    // 枝条颤动频率
+    float leafStrength   = 0.15f;   // 叶片旋转幅度(弧度)
+    float leafFreq       = 5.0f;    // 叶片旋转频率
+};
+
 class Renderer {
 public:
     void init();
@@ -68,6 +85,8 @@ public:
                       float ndcX, float ndcY) const;
 
     LightingParams lighting;
+    WindParams     wind;
+    float          windTime = 0.0f;  // 每帧由 Application 更新为 glfwGetTime()
 
 private:
     struct GpuBatch {
@@ -114,6 +133,7 @@ private:
     void renderShadowPass();
 
     void setLightUniforms(Shader& sh);
+    void setWindUniforms(Shader& sh);
     void bindBatchTextures(Shader& sh, GpuBatch& gb);
     void buildGrid();
     void buildGround();

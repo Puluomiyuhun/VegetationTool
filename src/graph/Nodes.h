@@ -87,3 +87,15 @@ public:
     std::unique_ptr<TreeNode> clone() const override { return std::make_unique<FrondNode>(*this); }
     void copyParamsFrom(const TreeNode* o) override { if (auto* p = dynamic_cast<const FrondNode*>(o)) params = p->params; }
 };
+
+// ---- Export ----
+class ExportNode : public TreeNode {
+public:
+    ExportParams params;
+    ExportNode();
+    NodeType    getType()  const override { return NodeType::Export; }
+    const char* getLabel() const override { return "Export"; }
+    bool        drawProperties() override;
+    std::unique_ptr<TreeNode> clone() const override { return std::make_unique<ExportNode>(*this); }
+    void copyParamsFrom(const TreeNode* o) override { if (auto* p = dynamic_cast<const ExportNode*>(o)) params = p->params; }
+};

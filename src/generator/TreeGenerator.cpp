@@ -95,11 +95,16 @@ void TreeGenerator::appendCylinder(MeshBatch& batch,
         float vTop = ((vAccum + segLen) / totalLen) * uvTilingV;
         vAccum += segLen;
 
-        // 每个顶点: pos(3)+normal(3)+uv(2) = 8 floats
-        uint32_t base = (uint32_t)(batch.vertices.size() / 8);
+        // 每个顶点: pos(3)+normal(3)+uv(2)+wind(2) = 10 floats
+        uint32_t base = (uint32_t)(batch.vertices.size() / 10);
+        int lastRing = (int)rings.size() - 1;
         for (int ring = 0; ring < 2; ++ring) {
             const BranchRing& r = (ring == 0) ? bot : top;
             float vCoord = (ring == 0) ? vBot : vTop;
+            // tRing: 该环沿枝条从基部(0)到尖端(1)的比例, 尖端风力权重更大
+            int   ringIdx = (ring == 0) ? (int)ri : (int)ri + 1;
+            float tRing   = (lastRing > 0) ? (float)ringIdx / (float)lastRing : 0.0f;
+            float w       = m_windW * tRing;
             for (int j = 0; j <= sides; ++j) {
                 float angle = (float)j / (float)sides * pi2;
                 float uCoord = (float)j / (float)sides * uTiling;
@@ -108,7 +113,7 @@ void TreeGenerator::appendCylinder(MeshBatch& batch,
                 glm::vec3 pos    = r.center + localDir * r.radius;
                 glm::vec3 normal = glm::normalize(localDir);
                 batch.vertices.insert(batch.vertices.end(),
-                    {pos.x,pos.y,pos.z, normal.x,normal.y,normal.z, uCoord, vCoord});
+                    {pos.x,pos.y,pos.z, normal.x,normal.y,normal.z, uCoord, vCoord, w, m_windPhase});
             }
         }
         int rv = sides + 1;
@@ -172,7 +177,7 @@ void TreeGenerator::appendCollar(MeshBatch& batch,
     auto smooth = [](float x){ x = std::clamp(x, 0.0f, 1.0f); return x*x*(3.0f-2.0f*x); };
 
     int rv = sides + 1;
-    uint32_t base = (uint32_t)(batch.vertices.size() / 8);
+    uint32_t base = (uint32_t)(batch.vertices.size() / 10);
 
     for (int k = 0; k <= weldSegs; ++k) {
         float u    = (float)k / (float)weldSegs;
@@ -202,7 +207,7 @@ void TreeGenerator::appendCollar(MeshBatch& batch,
             float vCoord = -glm::length(pos - (childBase + localDir * startR)) * vPerUnit;
             float uCoord = (float)j / (float)sides * uTiling;
             batch.vertices.insert(batch.vertices.end(),
-                {pos.x,pos.y,pos.z, normal.x,normal.y,normal.z, uCoord, vCoord});
+                {pos.x,pos.y,pos.z, normal.x,normal.y,normal.z, uCoord, vCoord, 0.0f, m_windPhase});
         }
     }
     // k=0 圈(枝条基部) → k=weldSegs 圈(父级表面), 环环相连成焊接带
@@ -240,6 +245,21 @@ TreeMeshData TreeGenerator::generate(NodeGraph& graph, NodeId hlNode) {
     return data;
 }
 
+// 只生成指定 Trunk 一株的整棵树(无高亮)。供 Export 节点导出单株模型。
+TreeMeshData TreeGenerator::generateSubtree(NodeGraph& graph, NodeId trunkId) {
+    TreeMeshData data;
+    m_out = &data;
+    m_hlNode = INVALID_NODE;
+    TreeNode* node = graph.getNode(trunkId);
+    if (node && node->getType() == NodeType::Trunk) {
+        const auto& tp = static_cast<const TrunkNode*>(node)->params;
+        glm::vec3 base = {tp.posX, 0.0f, tp.posZ};
+        processNode(graph, node, nullptr, base, {0,1,0}, 1.0f, 0);
+    }
+    m_out = nullptr;
+    return data;
+}
+
 void TreeGenerator::processNode(
     const NodeGraph& graph, const TreeNode* node,
     const std::vector<BranchRing>* parentRings,
@@ -257,6 +277,23 @@ void TreeGenerator::processNode(
     NodeId prevNode = m_curNode;
     m_hlCapture = isHl;
     m_curNode = node->id;
+
+    // 顶点风力: 按节点类型设定基权重, 相位按 id 哈希(令相邻枝条不同步)。
+    // 递归子节点会覆盖这两个值, 返回后恢复(与 m_hlCapture 同理)。
+    float prevWindW = m_windW;
+    float prevWindPhase = m_windPhase;
+    switch (node->getType()) {
+        case NodeType::Trunk:       m_windW = 0.05f; break;
+        case NodeType::Branch:      m_windW = 0.28f; break;
+        case NodeType::Twig:        m_windW = 0.5f;  break;
+        case NodeType::Roots:       m_windW = 0.0f;  break;
+        case NodeType::LeafCluster: m_windW = 1.0f;  break;
+        case NodeType::Spine:       m_windW = 0.5f;  break;
+        case NodeType::Frond:       m_windW = 0.7f;  break;
+        case NodeType::Export:      m_windW = 0.0f;  break;  // 导出节点无几何
+    }
+    // id 哈希 → [0, 2π) 相位
+    m_windPhase = (float)((node->id * 2654435761u) % 62832u) / 10000.0f;
 
     switch (node->getType()) {
     case NodeType::Trunk: {
@@ -291,17 +328,21 @@ void TreeGenerator::processNode(
     case NodeType::Frond:
         buildFrond(static_cast<const FrondNode*>(node), parentRings, origin, dir);
         break;
+    case NodeType::Export:
+        break;  // 导出节点不生成几何(仅作为 Trunk→导出 的连接标记)
     }
 
     m_hlCapture = prevCapture;
     m_curNode = prevNode;
+    m_windW = prevWindW;
+    m_windPhase = prevWindPhase;
 }
 
 // 每次向 batch 追加几何后调用: (1) 把 [iFrom,end) 的三角(取自 [vFrom,end) 顶点前3个
 // float 的世界坐标)登记到拾取表, 归属 m_curNode; (2) 若 m_hlCapture 为真, 把这些顶点的
 // pos(3)+normal(3)镜像进描边缓冲(hlVerts/hlIdx)供轮廓渲染。
 void TreeGenerator::afterAppend(const MeshBatch& batch, size_t vFrom, size_t iFrom) {
-    int stride = batch.isLeaf ? 11 : 8;
+    int stride = batch.isLeaf ? 16 : 10;
     size_t localVBase = vFrom / stride;
 
     // (1) 拾取三角: 遍历新增索引三个一组, 取世界坐标顶点
@@ -680,18 +721,52 @@ void TreeGenerator::buildLeafCluster(
             {pos + leafRight*hw + leafUp*hs, 1.f, 1.f},
             {pos - leafRight*hw + leafUp*hs, 0.f, 1.f},
         };
-        // 每顶点: pos(3)+normal(3)+uv(2)+albedo(3) = 11 floats
-        size_t hlV = batch.vertices.size(), hlI = batch.indices.size();
-        uint32_t base = (uint32_t)(batch.vertices.size() / 11);
-        for (auto& lvi : lv) {
-            batch.vertices.insert(batch.vertices.end(),
-                {lvi.pos.x,lvi.pos.y,lvi.pos.z,
-                 leafFwd.x,leafFwd.y,leafFwd.z,
-                 lvi.u, lvi.v,
-                 col.r,col.g,col.b});
+        // 叶片法线软化: 从平面卡片法线 leafFwd 混合到"叶簇轴心→叶片"的球形外法线,
+        // 让整簇叶像一个受光的体积(SpeedTree 观感关键), 而非一堆硬纸片。
+        glm::vec3 leafNormal = leafFwd;
+        if (p.normalSoften > 0.0f) {
+            glm::vec3 outwardN = pos - axisPos;
+            if (glm::dot(outwardN, outwardN) > 1e-8f) {
+                outwardN = glm::normalize(outwardN);
+                leafNormal = glm::normalize(glm::mix(leafFwd, outwardN,
+                                                     glm::clamp(p.normalSoften, 0.0f, 1.0f)));
+            }
         }
-        batch.indices.insert(batch.indices.end(),
-            {base,base+1,base+2, base,base+2,base+3});
+
+        // 每顶点: pos(3)+normal(3)+uv(2)+albedo(3)+wind(2)+anchor(3) = 16 floats
+        // 叶片绕 basePos(附着点)整体摆动, 每片叶相位错开(i*2.4)
+        float leafPhase = m_windPhase + (float)i * 2.4f;
+        size_t hlV = batch.vertices.size(), hlI = batch.indices.size();
+        uint32_t base = (uint32_t)(batch.vertices.size() / 16);
+
+        auto emitVert = [&](const glm::vec3& wp, float u, float v) {
+            batch.vertices.insert(batch.vertices.end(),
+                {wp.x,wp.y,wp.z,
+                 leafNormal.x,leafNormal.y,leafNormal.z,
+                 u, v,
+                 col.r,col.g,col.b,
+                 m_windW, leafPhase,
+                 basePos.x, basePos.y, basePos.z});
+        };
+
+        if (p.useCutout && p.cutoutPoints.size() >= 3 && p.cutoutTris.size() >= 3) {
+            // 轮廓网格: UV 点(u,v)映射到叶卡平面(u=0.5,v=0.5 为中心, 边长 2hw×2hs)
+            for (const glm::vec2& q : p.cutoutPoints) {
+                glm::vec3 wp = pos + leafRight * ((q.x - 0.5f) * 2.0f * hw)
+                                   + leafUp    * ((q.y - 0.5f) * 2.0f * hs);
+                emitVert(wp, q.x, q.y);
+            }
+            uint32_t vCount = (uint32_t)p.cutoutPoints.size();
+            for (size_t k = 0; k + 2 < p.cutoutTris.size(); k += 3) {
+                uint32_t a = p.cutoutTris[k], b = p.cutoutTris[k+1], c = p.cutoutTris[k+2];
+                if (a < vCount && b < vCount && c < vCount)
+                    batch.indices.insert(batch.indices.end(), {base+a, base+b, base+c});
+            }
+        } else {
+            for (auto& lvi : lv) emitVert(lvi.pos, lvi.u, lvi.v);
+            batch.indices.insert(batch.indices.end(),
+                {base,base+1,base+2, base,base+2,base+3});
+        }
         afterAppend(batch, hlV, hlI);
     }
 }
@@ -786,6 +861,7 @@ void TreeGenerator::buildFrond(
     };
 
     // 逐 ring 生成一排横向顶点(共 rings.size() 行 × totalCols 列)
+    glm::vec3 frondAnchor = rings.front().center;   // 叶带整体绕基部摆动
     std::vector<uint32_t> rowBase(rings.size());
     for (size_t ri = 0; ri < rings.size(); ++ri) {
         const BranchRing& r = rings[ri];
@@ -796,8 +872,9 @@ void TreeGenerator::buildFrond(
         // 叶面法线 ≈ 脊线 up × right (垂直于叶带平面)
         glm::vec3 faceN = glm::normalize(glm::cross(rightAxis, upAxis));
         float vCoord = t;
+        float wFrond = m_windW * t;   // 尖端摆动更明显
 
-        rowBase[ri] = (uint32_t)(batch.vertices.size() / 11);
+        rowBase[ri] = (uint32_t)(batch.vertices.size() / 16);
         for (int c = 0; c < totalCols; ++c) {
             float lateral = ((float)c / (float)(totalCols-1)) * 2.0f - 1.0f; // [-1,1]
             float x = lateral * hw;
@@ -811,7 +888,9 @@ void TreeGenerator::buildFrond(
             float uCoord = (float)c / (float)(totalCols-1);
             batch.vertices.insert(batch.vertices.end(),
                 {pos.x,pos.y,pos.z, faceN.x,faceN.y,faceN.z, uCoord, vCoord,
-                 col.r,col.g,col.b});
+                 col.r,col.g,col.b,
+                 wFrond, m_windPhase,
+                 frondAnchor.x, frondAnchor.y, frondAnchor.z});
         }
     }
 

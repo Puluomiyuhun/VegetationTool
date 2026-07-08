@@ -1,4 +1,6 @@
 #include "Application.h"
+#include "graph/Nodes.h"
+#include "io/ProjectIO.h"
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include <stdexcept>
@@ -114,6 +116,31 @@ void Application::update() {
         m_graph.clearDirty();
         m_lastHlNode = m_selectedNode;
     }
+
+    // 处理 Export 节点导出请求: 找到其上游 Trunk, 生成该株树网格, 写出 OBJ。
+    for (const auto& [id, node] : m_graph.nodes()) {
+        if (node->getType() != NodeType::Export) continue;
+        auto* ex = static_cast<ExportNode*>(node.get());
+        if (!ex->params.requestExport) continue;
+        ex->params.requestExport = false;
+
+        // 上游节点 = 其输出连到本 Export 输入的节点(遍历各节点的 children 反查)
+        NodeId trunkId = INVALID_NODE;
+        for (const auto& [pid, pnode] : m_graph.nodes()) {
+            for (const TreeNode* c : m_graph.childrenOf(pid))
+                if (c->id == id) { trunkId = pid; break; }
+            if (trunkId != INVALID_NODE) break;
+        }
+        TreeNode* trunk = m_graph.getNode(trunkId);
+        if (!trunk || trunk->getType() != NodeType::Trunk) {
+            std::fprintf(stderr, "[Export] 未连接 Trunk, 跳过导出\n");
+            continue;
+        }
+        TreeMeshData mesh = m_generator.generateSubtree(m_graph, trunkId);
+        bool ok = ProjectIO::exportOBJ(mesh, ex->params.path);
+        std::fprintf(ok ? stdout : stderr, "[Export] %s -> %s\n",
+                     ok ? "OK" : "FAILED", ex->params.path.c_str());
+    }
 }
 
 void Application::render() {
@@ -122,6 +149,9 @@ void Application::render() {
     glViewport(0, 0, w, h);
     glClearColor(0.08f, 0.08f, 0.10f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+    // 顶点风力动画时间(秒), 供风力着色器驱动
+    m_renderer.windTime = (float)glfwGetTime();
 
     m_ui.beginFrame();
     m_ui.render(m_graph, m_selectedNode,

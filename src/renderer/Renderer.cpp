@@ -90,11 +90,11 @@ void Renderer::uploadTreeMesh(const TreeMeshData& data) {
         gb.isLeaf   = batch.isLeaf;
 
         if (batch.isLeaf)
-            // pos(3)+normal(3)+uv(2)+albedo(3) = 11
-            gb.mesh.create(batch.vertices, batch.indices, {3, 3, 2, 3});
+            // pos(3)+normal(3)+uv(2)+albedo(3)+wind(2)+anchor(3) = 16
+            gb.mesh.create(batch.vertices, batch.indices, {3, 3, 2, 3, 2, 3});
         else
-            // pos(3)+normal(3)+uv(2) = 8
-            gb.mesh.create(batch.vertices, batch.indices, {3, 3, 2});
+            // pos(3)+normal(3)+uv(2)+wind(2) = 10
+            gb.mesh.create(batch.vertices, batch.indices, {3, 3, 2, 2});
 
         // 贴图走缓存复用：拖参数重建网格时不再重复解码磁盘 PNG
         gb.texBaseColor = getTexture(batch.material.baseColorTex, true);
@@ -124,7 +124,7 @@ void Renderer::computeSceneBounds(const TreeMeshData& data) {
     bool any = false;
     glm::vec3 mn( 1e9f), mx(-1e9f);
     for (const auto& batch : data.batches) {
-        int stride = batch.isLeaf ? 11 : 8;  // 每顶点 float 数
+        int stride = batch.isLeaf ? 16 : 10;  // 每顶点 float 数
         for (size_t i = 0; i + 2 < batch.vertices.size(); i += stride) {
             glm::vec3 p(batch.vertices[i], batch.vertices[i+1], batch.vertices[i+2]);
             mn = glm::min(mn, p);
@@ -157,6 +157,26 @@ void Renderer::setLightUniforms(Shader& sh) {
     glActiveTexture(GL_TEXTURE4);
     glBindTexture(GL_TEXTURE_2D, m_shadowTex);
     glActiveTexture(GL_TEXTURE0);
+}
+
+// 上传顶点风力 uniform。同一函数供 branch/leaf 两个 shader 使用；
+// 目标 shader 若无对应 uniform, glGetUniformLocation 返回 -1, set 为安全空操作。
+void Renderer::setWindUniforms(Shader& sh) {
+    auto& w = wind;
+    float rad = glm::radians(w.dirAngleDeg);
+    glm::vec3 dir(std::cos(rad), 0.0f, std::sin(rad));
+    sh.setInt("uWindEnabled", w.enabled ? 1 : 0);
+    sh.setFloat("uWindTime", windTime);
+    sh.setVec3("uWindDir", dir.x, dir.y, dir.z);
+    sh.setFloat("uWindStrength",       w.strength);
+    sh.setFloat("uWindGlobalStrength", w.globalStrength);
+    sh.setFloat("uWindGlobalFreq",     w.globalFreq);
+    sh.setFloat("uWindBranchStrength", w.branchStrength);
+    sh.setFloat("uWindBranchFreq",     w.branchFreq);
+    sh.setFloat("uWindLeafStrength",   w.leafStrength);
+    sh.setFloat("uWindLeafFreq",       w.leafFreq);
+    // 树高(世界空间), 用于把顶点高度归一化为 hr∈[0,1]
+    sh.setFloat("uWindTreeHeight", m_sceneMax.y);
 }
 
 // 光源视角把整棵树写入深度贴图。正交视锥拟合场景 AABB。
@@ -270,6 +290,7 @@ void Renderer::render(const OrbitCamera& camera, float aspect, bool wireframe) {
             m_leafShader.setFloat("uSssStrength", gb.material.sssStrength);
             m_leafShader.setFloat("uAlphaCutoff", gb.material.alphaCutoff);
             setLightUniforms(m_leafShader);
+            setWindUniforms(m_leafShader);
             bindBatchTextures(m_leafShader, gb);
             gb.mesh.draw();
             glEnable(GL_CULL_FACE);
@@ -283,6 +304,7 @@ void Renderer::render(const OrbitCamera& camera, float aspect, bool wireframe) {
             m_branchShader.setFloat("uMetallic",  gb.material.metallic);
             m_branchShader.setFloat("uAoStrength",gb.material.aoStrength);
             setLightUniforms(m_branchShader);
+            setWindUniforms(m_branchShader);
             bindBatchTextures(m_branchShader, gb);
             gb.mesh.draw();
         }

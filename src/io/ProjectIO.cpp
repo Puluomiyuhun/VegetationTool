@@ -160,9 +160,21 @@ void writeNode(std::ostream& o, const TreeNode* n) {
         o << "leafSize "      << p.leafSize      << '\n';
         o << "leafAspect "    << p.leafAspect    << '\n';
         o << "normalJitter "  << p.normalJitter  << '\n';
+        o << "normalSoften "  << p.normalSoften  << '\n';
         o << "planar "        << (p.planar ? 1 : 0) << '\n';
         o << "sizeFalloff "   << p.sizeFalloff   << '\n';
         o << "seed "          << p.seed          << '\n';
+        o << "useCutout "     << (p.useCutout ? 1 : 0) << '\n';
+        if (!p.cutoutPoints.empty()) {
+            o << "cutoutPoints " << p.cutoutPoints.size();
+            for (const auto& q : p.cutoutPoints) o << ' ' << q.x << ' ' << q.y;
+            o << '\n';
+        }
+        if (!p.cutoutTris.empty()) {
+            o << "cutoutTris " << p.cutoutTris.size();
+            for (uint32_t t : p.cutoutTris) o << ' ' << t;
+            o << '\n';
+        }
         writeMaterial(o, p.material);
         break;
     }
@@ -201,6 +213,12 @@ void writeNode(std::ostream& o, const TreeNode* n) {
         o << "serrateDepth "<< p.serrateDepth<< '\n';
         o << "seed "        << p.seed        << '\n';
         writeMaterial(o, p.material);
+        break;
+    }
+    case NodeType::Export: {
+        const auto& p = static_cast<const ExportNode*>(n)->params;
+        // path 放最后: value 取整行剩余(允许含空格路径)
+        o << "path " << p.path << '\n';
         break;
     }
     }
@@ -332,9 +350,25 @@ void applyParams(TreeNode* n, const KV& kv) {
         auto& p = static_cast<LeafClusterNode*>(n)->params;
         p.leafCount=getI(kv,"leafCount",p.leafCount); p.clusterRadius=getF(kv,"clusterRadius",p.clusterRadius);
         p.leafSize=getF(kv,"leafSize",p.leafSize); p.normalJitter=getF(kv,"normalJitter",p.normalJitter);
+        p.normalSoften=getF(kv,"normalSoften",p.normalSoften);
         p.leafAspect=getF(kv,"leafAspect",p.leafAspect);
         p.planar=getI(kv,"planar",p.planar?1:0)!=0; p.sizeFalloff=getF(kv,"sizeFalloff",p.sizeFalloff);
         p.seed=getI(kv,"seed",p.seed);
+        p.useCutout=getI(kv,"useCutout",p.useCutout?1:0)!=0;
+        {
+            std::string sp = getS(kv, "cutoutPoints");
+            if (!sp.empty()) {
+                std::istringstream ss(sp); size_t cnt = 0; ss >> cnt;
+                p.cutoutPoints.clear();
+                for (size_t i = 0; i < cnt; ++i) { glm::vec2 q; ss >> q.x >> q.y; p.cutoutPoints.push_back(q); }
+            }
+            std::string st = getS(kv, "cutoutTris");
+            if (!st.empty()) {
+                std::istringstream ss(st); size_t cnt = 0; ss >> cnt;
+                p.cutoutTris.clear();
+                for (size_t i = 0; i < cnt; ++i) { uint32_t t = 0; ss >> t; p.cutoutTris.push_back(t); }
+            }
+        }
         readMaterial(kv, p.material); break;
     }
     case NodeType::Spine: {
@@ -360,6 +394,12 @@ void applyParams(TreeNode* n, const KV& kv) {
         p.serrate=getI(kv,"serrate",p.serrate?1:0)!=0; p.serrateDepth=getF(kv,"serrateDepth",p.serrateDepth);
         p.seed=getI(kv,"seed",p.seed);
         readMaterial(kv, p.material); break;
+    }
+    case NodeType::Export: {
+        auto& p = static_cast<ExportNode*>(n)->params;
+        std::string s = getS(kv, "path");
+        if (!s.empty()) p.path = s;
+        break;
     }
     }
 }
@@ -680,6 +720,49 @@ bool load(NodeGraph& graph, const std::string& path, LightingParams* lighting) {
 void loadDefaultTemplate(NodeGraph& graph) {
     std::istringstream ss(kDefaultTemplate);
     parseStream(graph, ss);
+}
+
+// 导出 OBJ：遍历所有批次, 逐批写成一个 group。
+// branch 顶点 stride=10 (pos3,nrm3,uv2,wind2); leaf 顶点 stride=16 (pos3,nrm3,uv2,albedo3,wind2,anchor3)。
+// 只取 pos/nrm/uv 三段写出, 其余(风力/albedo/anchor)丢弃。OBJ 索引 1-based 且全局累加。
+bool exportOBJ(const TreeMeshData& mesh, const std::string& path) {
+    std::ofstream f(path);
+    if (!f) return false;
+    f << "# Exported by VegetationTool\n";
+
+    size_t vBase = 0;  // 已写出的顶点数(OBJ 索引全局累加)
+    int batchIdx = 0;
+    for (const auto& batch : mesh.batches) {
+        if (batch.vertices.empty() || batch.indices.empty()) continue;
+        int stride = batch.isLeaf ? 16 : 10;
+        size_t vCount = batch.vertices.size() / stride;
+
+        f << "g " << (batch.isLeaf ? "leaf_" : "branch_") << batchIdx << '\n';
+        for (size_t i = 0; i < vCount; ++i) {
+            const float* v = &batch.vertices[i * stride];
+            f << "v "  << v[0] << ' ' << v[1] << ' ' << v[2] << '\n';
+        }
+        for (size_t i = 0; i < vCount; ++i) {
+            const float* v = &batch.vertices[i * stride];
+            f << "vn " << v[3] << ' ' << v[4] << ' ' << v[5] << '\n';
+        }
+        for (size_t i = 0; i < vCount; ++i) {
+            const float* v = &batch.vertices[i * stride];
+            f << "vt " << v[6] << ' ' << v[7] << '\n';
+        }
+        // 面: OBJ 用 1-based 且带全局偏移的 v/vt/vn
+        for (size_t i = 0; i + 2 < batch.indices.size(); i += 3) {
+            uint32_t a = (uint32_t)(vBase + batch.indices[i]   + 1);
+            uint32_t b = (uint32_t)(vBase + batch.indices[i+1] + 1);
+            uint32_t c = (uint32_t)(vBase + batch.indices[i+2] + 1);
+            f << "f " << a << '/' << a << '/' << a << ' '
+                      << b << '/' << b << '/' << b << ' '
+                      << c << '/' << c << '/' << c << '\n';
+        }
+        vBase += vCount;
+        ++batchIdx;
+    }
+    return true;
 }
 
 } // namespace ProjectIO

@@ -19,8 +19,25 @@ static std::string openImageFileDialog() {
         return std::string(szFile);
     return std::string();
 }
+// OBJ 保存对话框：返回选中的保存路径(自动补 .obj)；取消返回空串
+static std::string saveObjFileDialog(const std::string& initial) {
+    char szFile[1024] = {0};
+    strncpy(szFile, initial.c_str(), sizeof(szFile)-1);
+    OPENFILENAMEA ofn = {0};
+    ofn.lStructSize = sizeof(ofn);
+    ofn.lpstrFile   = szFile;
+    ofn.nMaxFile    = sizeof(szFile);
+    ofn.lpstrFilter = "Wavefront OBJ\0*.obj\0All\0*.*\0";
+    ofn.nFilterIndex = 1;
+    ofn.lpstrDefExt = "obj";
+    ofn.Flags = OFN_OVERWRITEPROMPT | OFN_NOCHANGEDIR;
+    if (GetSaveFileNameA(&ofn))
+        return std::string(szFile);
+    return std::string();
+}
 #else
 static std::string openImageFileDialog() { return std::string(); }
+static std::string saveObjFileDialog(const std::string&) { return std::string(); }
 #endif
 
 // 公共：绘制 MaterialParams 滑条，返回是否有变化
@@ -212,9 +229,18 @@ bool LeafClusterNode::drawProperties() {
         changed |= ImGui::SliderFloat("Leaf Size",      &params.leafSize,      0.02f, 0.8f);
         changed |= ImGui::SliderFloat("Leaf Aspect",    &params.leafAspect,    0.1f, 1.5f);
         changed |= ImGui::SliderFloat("Normal Jitter",  &params.normalJitter,  0.0f, 1.0f);
+        changed |= ImGui::SliderFloat("Normal Soften",  &params.normalSoften,  0.0f, 1.0f);
         changed |= ImGui::Checkbox   ("Planar (fern)",  &params.planar);
         changed |= ImGui::SliderFloat("Size Falloff",   &params.sizeFalloff,   0.0f, 1.0f);
         changed |= ImGui::SliderInt  ("Seed",           &params.seed,          0, 999);
+    }
+    if (ImGui::CollapsingHeader("Cutout Mesh", ImGuiTreeNodeFlags_DefaultOpen)) {
+        // 轮廓裁剪网格: 用贴合剪影的三角网格代替四边形卡片, 降低透明像素 overdraw。
+        changed |= ImGui::Checkbox("Use Cutout Mesh", &params.useCutout);
+        if (ImGui::Button("Edit Cutout Mesh...")) params.requestEditCutout = true;
+        ImGui::SameLine();
+        ImGui::TextDisabled("(%d pts / %d tris)",
+            (int)params.cutoutPoints.size(), (int)params.cutoutTris.size() / 3);
     }
     if (ImGui::CollapsingHeader("Material", ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui::PushID("mat_leaf");
@@ -322,4 +348,33 @@ bool FrondNode::drawProperties() {
         ImGui::PopID();
     }
     return changed;
+}
+
+// ---------- ExportNode ----------
+ExportNode::ExportNode() { type = NodeType::Export; }
+
+bool ExportNode::drawProperties() {
+    ImGui::TextWrapped("Connect a Trunk's output into this node's input, "
+                       "then export that whole tree as an OBJ mesh.");
+    ImGui::Spacing();
+
+    // 路径(可编辑)
+    char buf[1024];
+    strncpy(buf, params.path.c_str(), sizeof(buf)-1); buf[sizeof(buf)-1] = 0;
+    ImGui::TextDisabled("Output file");
+    ImGui::SetNextItemWidth(-56.0f);
+    if (ImGui::InputText("##exportpath", buf, sizeof(buf)))
+        params.path = buf;
+    ImGui::SameLine();
+    if (ImGui::Button("...##exportbrowse")) {
+        std::string sel = saveObjFileDialog(params.path);
+        if (!sel.empty()) params.path = sel;
+    }
+
+    ImGui::Spacing();
+    if (ImGui::Button("Export OBJ", ImVec2(-1, 0)))
+        params.requestExport = true;   // 由 Application 每帧检查并执行
+
+    // 属性变更不需要重建网格, 恒返回 false
+    return false;
 }
