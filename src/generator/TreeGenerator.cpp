@@ -260,6 +260,129 @@ TreeMeshData TreeGenerator::generateSubtree(NodeGraph& graph, NodeId trunkId) {
     return data;
 }
 
+// 生成 nodeId 及其上游祖先链: 沿输入链从 nodeId 追溯到根 Trunk, 收集这条链上的
+// 全部节点; 只生成链上节点, 各多实例节点仅长一根链上代表实例(chain 模式)。
+// 保持场景原始位姿(从根 Trunk 起始, 与整株一致)。
+TreeMeshData TreeGenerator::generateChain(NodeGraph& graph, NodeId nodeId) {
+    TreeMeshData data;
+
+    // 追溯祖先链: nodeId → ... → 根 Trunk, 沿途节点全部收集
+    m_chainNodes.clear();
+    NodeId cur = nodeId, rootTrunk = INVALID_NODE;
+    for (int guard = 0; guard < 64 && cur != INVALID_NODE; ++guard) {
+        TreeNode* cn = graph.getNode(cur);
+        if (!cn) break;
+        m_chainNodes.insert(cur);
+        if (cn->getType() == NodeType::Trunk) { rootTrunk = cur; break; }
+        NodeId parent = INVALID_NODE;
+        for (const auto& [pid, pnode] : graph.nodes()) {
+            for (const TreeNode* c : graph.childrenOf(pid))
+                if (c->id == cur) { parent = pid; break; }
+            if (parent != INVALID_NODE) break;
+        }
+        cur = parent;
+    }
+    if (rootTrunk == INVALID_NODE) { m_chainNodes.clear(); return data; }
+
+    m_out = &data;
+    m_hlNode = INVALID_NODE;
+    m_chainMode = true;
+    TreeNode* trunk = graph.getNode(rootTrunk);
+    if (trunk) {
+        const auto& tp = static_cast<const TrunkNode*>(trunk)->params;
+        glm::vec3 base = {tp.posX, 0.0f, tp.posZ};
+        processNode(graph, trunk, nullptr, base, {0,1,0}, 1.0f, 0);
+    }
+    m_chainMode = false;
+    m_chainNodes.clear();
+    m_out = nullptr;
+    return data;
+}
+
+// 标本模式的参考父级尺寸: 无真实父级(测不到)时的回退值, 用于把相对长度/半径换算成绝对值。
+static constexpr float kSpecimenParentLen    = 4.0f;
+static constexpr float kSpecimenParentRadius = 0.3f;
+
+// 方案B: 在真实整株里测量 targetId 节点首个实例的父级长度与附着半径,
+// 写入 m_specParentLen / m_specParentRadius, 令标本粗细/长细比与编辑器一致。
+// 测不到(节点未接到任何根 Trunk 上游)时保留默认回退值。
+void TreeGenerator::measureSpecimenParent(NodeGraph& graph, NodeId targetId) {
+    m_specParentLen    = kSpecimenParentLen;
+    m_specParentRadius = kSpecimenParentRadius;
+
+    // 从 target 沿输入链向上追溯到根 Trunk
+    NodeId cur = targetId, rootTrunk = INVALID_NODE;
+    for (int guard = 0; guard < 64 && cur != INVALID_NODE; ++guard) {
+        TreeNode* cn = graph.getNode(cur);
+        if (!cn) break;
+        if (cn->getType() == NodeType::Trunk) { rootTrunk = cur; break; }
+        NodeId parent = INVALID_NODE;
+        for (const auto& [pid, pnode] : graph.nodes()) {
+            for (const TreeNode* c : graph.childrenOf(pid))
+                if (c->id == cur) { parent = pid; break; }
+            if (parent != INVALID_NODE) break;
+        }
+        cur = parent;
+    }
+    if (rootTrunk == INVALID_NODE) return;  // 追溯不到根: 用默认值
+
+    // 跑一遍真实整株(丢弃网格), 只为在真实 build 路径里捕获 target 的父级尺寸
+    TreeMeshData scratch;
+    m_out            = &scratch;
+    m_hlNode         = INVALID_NODE;
+    m_specimenRoot   = INVALID_NODE;   // 关键: 走真实分支而非标本短路
+    m_specimenSeedOffset = 0;
+    m_measureTarget  = targetId;
+    m_measureDone    = false;
+    TreeNode* trunk = graph.getNode(rootTrunk);
+    if (trunk) {
+        const auto& tp = static_cast<const TrunkNode*>(trunk)->params;
+        glm::vec3 base = {tp.posX, 0.0f, tp.posZ};
+        processNode(graph, trunk, nullptr, base, {0,1,0}, 1.0f, 0);
+    }
+    m_measureTarget  = INVALID_NODE;
+    m_out            = nullptr;
+}
+
+// 生成 rootId 节点及其下游组成的竖直标本(根部在原点, 主枝沿 +Y)。
+TreeMeshData TreeGenerator::generateSpecimen(NodeGraph& graph, NodeId rootId, int seedOffset) {
+    // 方案B: 先测量真实父级尺寸, 使标本粗细与编辑器所见一致
+    measureSpecimenParent(graph, rootId);
+
+    TreeMeshData data;
+    m_out = &data;
+    m_hlNode = INVALID_NODE;
+    m_specimenRoot = rootId;
+    m_specimenSeedOffset = seedOffset;
+    TreeNode* node = graph.getNode(rootId);
+    if (node) {
+        glm::vec3 origin(0.0f);
+        glm::vec3 up(0, 1, 0);
+        NodeType t = node->getType();
+        if (t == NodeType::Branch || t == NodeType::Twig ||
+            t == NodeType::Spine  || t == NodeType::Frond) {
+            // 合成一根竖直父级 rings, 使 processNode 分派守卫通过。
+            // Branch/Twig/Spine 会在各自 build 内检测到标本根后改走竖直单枝逻辑;
+            // Frond 无多实例, 直接沿此竖直父级 rings 铺一条叶带即可。
+            std::vector<BranchRing> stub;
+            int segs = 6;
+            for (int i = 0; i <= segs; ++i) {
+                float f = (float)i / (float)segs;
+                stub.push_back({ origin + up * (m_specParentLen * f),
+                                 m_specParentRadius, up, {1, 0, 0} });
+            }
+            processNode(graph, node, &stub, origin, up, m_specParentLen, 0);
+        } else {
+            // Trunk / LeafCluster / Roots: 从原点沿 +Y 直接生成(Trunk 忽略 posX/posZ)。
+            processNode(graph, node, nullptr, origin, up, m_specParentLen, 0);
+        }
+    }
+    m_specimenRoot = INVALID_NODE;
+    m_specimenSeedOffset = 0;
+    m_out = nullptr;
+    return data;
+}
+
 void TreeGenerator::processNode(
     const NodeGraph& graph, const TreeNode* node,
     const std::vector<BranchRing>* parentRings,
@@ -267,6 +390,10 @@ void TreeGenerator::processNode(
     float parentLen, int depth)
 {
     if (!node || depth > MAX_DEPTH) return;
+
+    // 祖先链模式: 只生成链上的节点, 其余(旁支/叶)直接跳过。多实例节点在各自 build
+    // 函数内限制为只长一根链上代表实例。
+    if (m_chainMode && !m_chainNodes.count(node->id)) return;
 
     // 高亮描边 + 拾取: 进入本节点时把 m_curNode 指向自身(供 afterAppend 登记拾取三角
     // 归属), 并按 isHl 置 m_hlCapture。子节点递归发生在各 build 函数内部, 会用自己的值
@@ -326,6 +453,13 @@ void TreeGenerator::processNode(
                        graph, *parentRings, parentLen, depth);
         break;
     case NodeType::Frond:
+        // 方案B 测量: Frond 无实例循环, 直接用其父级(Spine)传入的长度/前环半径
+        if (m_measureTarget == node->id && !m_measureDone) {
+            m_specParentLen = parentLen;
+            if (parentRings && !parentRings->empty())
+                m_specParentRadius = parentRings->front().radius;
+            m_measureDone = true;
+        }
         buildFrond(static_cast<const FrondNode*>(node), parentRings, origin, dir);
         break;
     case NodeType::Export:
@@ -371,7 +505,7 @@ std::vector<BranchRing> TreeGenerator::buildTrunk(
     const TrunkNode* node, glm::vec3 origin, glm::vec3 dir)
 {
     const auto& p = node->params;
-    std::mt19937 rng(p.seed);
+    std::mt19937 rng(p.seed + m_specimenSeedOffset);
 
     // 主干锥度从 startRadius 起(不再把 baseFlare 乘进整条锥度)，
     // 树盘(根盘)改为在基部局部外扩、沿 flareHeight 高度用 smoothstep 平滑收敛，
@@ -410,9 +544,34 @@ void TreeGenerator::buildBranches(
 {
     const auto& p = node->params;
     float branchLen = parentLen * p.lengthRatio;
-    std::mt19937 rng(p.seed + depth * 100);
+    std::mt19937 rng(p.seed + depth * 100 + m_specimenSeedOffset);
     std::uniform_real_distribution<float> jitter(-5.0f, 5.0f);
     std::uniform_real_distribution<float> jitterLen(0.85f, 1.15f);
+
+    // 标本模式: 本节点即标本根 → 只长一根, 从原点(0,0,0)沿 +Y 竖直挺立
+    // (无重力偏转、无枝领), 子节点相对这根主枝正常生长。
+    if (m_specimenRoot == node->id) {
+        float thisLen = m_specParentLen * p.lengthRatio;
+        float startR  = m_specParentRadius * p.radiusScale;
+        float endR    = startR * p.endRatio;
+        auto rings = CylinderSegment::buildNaturalRings(
+            {0,0,0}, {0,1,0}, thisLen, startR, endR,
+            p.lengthSegs, p.noiseAmount, p.noiseFreq,
+            p.gnarl, p.taperPow, 0.0f, rng, p.jointCount, p.jointBulge);
+        auto& batch = getBatch(p.material, false);
+        size_t hlV = batch.vertices.size(), hlI = batch.indices.size();
+        appendCylinder(batch, rings, p.sides, p.uvTilingU, p.uvTilingV);
+        afterAppend(batch, hlV, hlI);
+        glm::vec3 tip    = rings.empty() ? glm::vec3(0,thisLen,0) : rings.back().center;
+        glm::vec3 tipDir = rings.empty() ? glm::vec3(0,1,0)       : rings.back().up;
+        for (auto* child : graph.childrenOf(node->id)) {
+            if (child->getType() == NodeType::LeafCluster)
+                processNode(graph, child, &rings, tip, tipDir, thisLen, depth+1);
+            else
+                processNode(graph, child, &rings, {0,0,0}, {0,1,0}, thisLen, depth+1);
+        }
+        return;
+    }
 
     float rs = std::clamp(p.regionStart, 0.0f, 1.0f);
     float re = std::clamp(p.regionEnd,   0.0f, 1.0f);
@@ -450,6 +609,13 @@ void TreeGenerator::buildBranches(
         glm::vec3 attachPos, attachDir, attachRight;
         float     attachRadius = p.radiusScale;
         sampleRings(parentRings, attachT, attachPos, attachDir, attachRight, attachRadius);
+
+        // 方案B 测量: 记录该 Branch 首个实例的真实父级长度/附着半径供标本用
+        if (m_measureTarget == node->id && !m_measureDone) {
+            m_specParentLen    = parentLen;
+            m_specParentRadius = attachRadius;
+            m_measureDone      = true;
+        }
 
         float az = at.az;
         float el = p.spreadAngle + jitter(rng);
@@ -499,6 +665,7 @@ void TreeGenerator::buildBranches(
             else
                 processNode(graph, child, &rings, attachPos, branchDir, thisLen, depth+1);
         }
+        if (m_chainMode) break;   // 祖先链模式: 只长一根链上代表实例
     }
 }
 
@@ -510,9 +677,34 @@ void TreeGenerator::buildTwig(
 {
     const auto& p = node->params;
     float twigLen = parentLen * p.lengthRatio;
-    std::mt19937 rng(p.seed + depth * 77);
+    std::mt19937 rng(p.seed + depth * 77 + m_specimenSeedOffset);
     std::uniform_real_distribution<float> jitter(-8.0f, 8.0f);
     std::uniform_real_distribution<float> jitterLen(0.8f, 1.2f);
+
+    // 标本模式: 竖直单枝(原点 +Y, 无重力/枝领), 子节点正常生长
+    if (m_specimenRoot == node->id) {
+        float thisLen = m_specParentLen * p.lengthRatio;
+        float startR  = m_specParentRadius * p.radiusScale;
+        float endR    = startR * p.endRatio;
+        auto rings = CylinderSegment::buildNaturalRings(
+            {0,0,0}, {0,1,0}, thisLen, startR, endR,
+            p.lengthSegs, p.noiseAmount, p.noiseFreq,
+            p.gnarl, p.taperPow, 0.0f, rng);
+        auto& batch = getBatch(p.material, false);
+        size_t hlV = batch.vertices.size(), hlI = batch.indices.size();
+        appendCylinder(batch, rings, p.sides, p.uvTilingU, p.uvTilingV);
+        afterAppend(batch, hlV, hlI);
+        glm::vec3 tip    = rings.empty() ? glm::vec3(0,thisLen,0) : rings.back().center;
+        glm::vec3 tipDir = rings.empty() ? glm::vec3(0,1,0)       : rings.back().up;
+        for (auto* child : graph.childrenOf(node->id)) {
+            if (child->getType() == NodeType::LeafCluster)
+                processNode(graph, child, &rings, tip, tipDir, thisLen, depth+1);
+            else
+                processNode(graph, child, &rings, {0,0,0}, {0,1,0}, thisLen, depth+1);
+        }
+        return;
+    }
+
     float rs = std::clamp(p.regionStart, 0.0f, 1.0f);
     float re = std::clamp(p.regionEnd,   0.0f, 1.0f);
     if (re < rs) std::swap(rs, re);
@@ -530,6 +722,13 @@ void TreeGenerator::buildTwig(
         glm::vec3 attachPos, attachDir, attachRight;
         float     attachRadius = p.radiusScale;
         sampleRings(parentRings, t, attachPos, attachDir, attachRight, attachRadius);
+
+        // 方案B 测量: 记录该 Twig 首个实例的真实父级长度/附着半径
+        if (m_measureTarget == node->id && !m_measureDone) {
+            m_specParentLen    = parentLen;
+            m_specParentRadius = attachRadius;
+            m_measureDone      = true;
+        }
 
         glm::vec3 twigDir = rotateAroundAxis(attachDir, attachRight, el);
         twigDir = rotateAroundAxis(twigDir, attachDir, az);
@@ -571,6 +770,7 @@ void TreeGenerator::buildTwig(
             else
                 processNode(graph, child, &rings, attachPos, twigDir, thisLen, depth+1);
         }
+        if (m_chainMode) break;   // 祖先链模式: 只长一根链上代表实例
     }
 }
 
@@ -581,7 +781,7 @@ void TreeGenerator::buildRoots(
     const RootsNode* node, const std::vector<BranchRing>& parentRings)
 {
     const auto& p = node->params;
-    std::mt19937 rng(p.seed + 500);
+    std::mt19937 rng(p.seed + 500 + m_specimenSeedOffset);
     std::uniform_real_distribution<float> jitter(-6.0f, 6.0f);
     std::uniform_real_distribution<float> jitterLen(0.8f, 1.25f);
 
@@ -633,6 +833,7 @@ void TreeGenerator::buildRoots(
                          startR, p.baseFlare, p.sides, p.uvTilingU, p.uvTilingV, thisLen,
                          &parentRings, p.collarSink);
         afterAppend(batch, hlV, hlI);
+        if (m_chainMode) break;   // 祖先链模式: 只长一根链上代表实例
     }
 }
 
@@ -646,7 +847,7 @@ void TreeGenerator::buildLeafCluster(
     glm::vec3 origin, glm::vec3 dir)
 {
     const auto& p = node->params;
-    std::mt19937 rng(p.seed);
+    std::mt19937 rng(p.seed + m_specimenSeedOffset);
     std::uniform_real_distribution<float> jitter(-p.normalJitter, p.normalJitter);
     std::uniform_real_distribution<float> radJit(0.7f, 1.3f);
     std::uniform_real_distribution<float> rot01(0.0f, 1.0f);
@@ -781,9 +982,29 @@ void TreeGenerator::buildSpine(
 {
     const auto& p = node->params;
     float spineLen = parentLen * p.lengthRatio;
-    std::mt19937 rng(p.seed + depth * 61);
+    std::mt19937 rng(p.seed + depth * 61 + m_specimenSeedOffset);
     std::uniform_real_distribution<float> jitter(-6.0f, 6.0f);
     std::uniform_real_distribution<float> jitterLen(0.85f, 1.15f);
+
+    // 标本模式: 竖直单叶轴(原点 +Y, 无重力), Frond 子节点沿其铺叶带
+    if (m_specimenRoot == node->id) {
+        float thisLen = m_specParentLen * p.lengthRatio;
+        float startR  = m_specParentRadius * p.radiusScale;
+        float endR    = startR * p.endRatio;
+        auto rings = CylinderSegment::buildNaturalRings(
+            {0,0,0}, {0,1,0}, thisLen, startR, endR,
+            p.lengthSegs, p.noiseAmount, p.noiseFreq,
+            p.gnarl, p.taperPow, 0.0f, rng);
+        auto& batch = getBatch(p.material, false);
+        size_t hlV = batch.vertices.size(), hlI = batch.indices.size();
+        appendCylinder(batch, rings, p.sides, p.uvTilingU, p.uvTilingV);
+        afterAppend(batch, hlV, hlI);
+        glm::vec3 tip    = rings.empty() ? glm::vec3(0,thisLen,0) : rings.back().center;
+        glm::vec3 tipDir = rings.empty() ? glm::vec3(0,1,0)       : rings.back().up;
+        for (auto* child : graph.childrenOf(node->id))
+            processNode(graph, child, &rings, tip, tipDir, thisLen, depth+1);
+        return;
+    }
 
     float rs = std::clamp(p.regionStart, 0.0f, 1.0f);
     float re = std::clamp(p.regionEnd,   0.0f, 1.0f);
@@ -797,6 +1018,13 @@ void TreeGenerator::buildSpine(
         glm::vec3 attachPos, attachDir, attachRight;
         float     attachRadius = p.radiusScale;
         sampleRings(parentRings, attachT, attachPos, attachDir, attachRight, attachRadius);
+
+        // 方案B 测量: 记录该 Spine 首个实例的真实父级长度/附着半径
+        if (m_measureTarget == node->id && !m_measureDone) {
+            m_specParentLen    = parentLen;
+            m_specParentRadius = attachRadius;
+            m_measureDone      = true;
+        }
 
         float az = i * p.rotateOffset + jitter(rng);
         float el = p.spreadAngle + jitter(rng);
@@ -828,6 +1056,7 @@ void TreeGenerator::buildSpine(
         glm::vec3 tipDir = rings.empty() ? spineDir : rings.back().up;
         for (auto* child : graph.childrenOf(node->id))
             processNode(graph, child, &rings, tip, tipDir, thisLen, depth+1);
+        if (m_chainMode) break;   // 祖先链模式: 只长一根链上代表实例
     }
 }
 

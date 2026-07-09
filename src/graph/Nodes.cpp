@@ -362,8 +362,37 @@ bool FrondNode::drawProperties() {
 ExportNode::ExportNode() { type = NodeType::Export; }
 
 bool ExportNode::drawProperties() {
-    ImGui::TextWrapped("Connect a Trunk's output into this node's input, "
-                       "then export that whole tree as an OBJ mesh.");
+    ImGui::TextWrapped("把上游连接的节点导出为 OBJ 网格。");
+    ImGui::Spacing();
+
+    ImGui::TextDisabled("导出模式");
+    ImGui::RadioButton("当前节点及下游 (竖直标本)", &params.exportMode, 0);
+    ImGui::RadioButton("整株 (追溯到根 Trunk)",      &params.exportMode, 1);
+    ImGui::RadioButton("当前节点及上游 (祖先链)",     &params.exportMode, 2);
+    ImGui::Spacing();
+
+    if (params.exportMode == 1) {
+        ImGui::TextDisabled("从上游节点向上追溯到根 Trunk, 导出完整整株。");
+    } else if (params.exportMode == 2) {
+        ImGui::TextWrapped("从上游节点沿输入链一路追溯到根, 只导出这条祖先链上的"
+                           "节点(不含它们的其它分支/叶), 保持在场景中的原始位姿。");
+    } else {
+        ImGui::TextWrapped("以上游节点为标本根, 导出该节点及其全部下游子枝叶组成的"
+                           "竖直标本 (根部在原点, 主枝沿 +Y 挺立), 供 UE5 PCG 用。");
+        ImGui::Spacing();
+        ImGui::SetNextItemWidth(120.0f);
+        ImGui::SliderInt("标本数量", &params.specimenCount, 1, 50);
+        ImGui::TextDisabled("每个标本用不同随机种子生成一个形态变体。");
+        int layout = params.singleFile ? 0 : 1;
+        ImGui::RadioButton("合并到一个文件 (并排)", &layout, 0);
+        ImGui::SameLine();
+        ImGui::RadioButton("每个一个文件 (_序号)", &layout, 1);
+        params.singleFile = (layout == 0);
+        if (params.singleFile && params.specimenCount > 1) {
+            ImGui::SetNextItemWidth(120.0f);
+            ImGui::SliderFloat("并排间距", &params.specimenSpacing, 0.5f, 20.0f, "%.1f");
+        }
+    }
     ImGui::Spacing();
 
     // 路径(可编辑)

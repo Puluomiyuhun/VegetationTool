@@ -5,6 +5,7 @@
 #include "CylinderSegment.h"
 #include <glm/glm.hpp>
 #include <random>
+#include <set>
 
 class TreeGenerator {
 public:
@@ -14,17 +15,45 @@ public:
     // 只生成 trunkId 这一株 Trunk 的整棵树网格(供 Export 节点导出单株模型使用)。
     TreeMeshData generateSubtree(NodeGraph& graph, NodeId trunkId);
 
+    // 生成 rootId 节点及其全部下游子枝叶组成的"竖直标本": 该节点作为一根主枝
+    // 从原点(0,0,0)沿 +Y 挺直生长(仅一根实例、无重力偏转、无枝领), 子节点相对其
+    // 正常生长。供 UE5 PCG 程序化种树使用的枝叶标本批量导出。
+    // seedOffset: 叠加到所有随机种子上, 用同一节点生成互不相同的形态变体。
+    TreeMeshData generateSpecimen(NodeGraph& graph, NodeId rootId, int seedOffset = 0);
+
+    // 生成 nodeId 及其上游祖先链(从根 Trunk 一路到该节点): 只生成这条链上的节点,
+    // 每个多实例节点只长一根(链上代表实例), 不含旁支/叶。保持场景原始位姿。
+    // 供"当前节点及上游"导出使用(如从 Trunk 导出只得一根干)。
+    TreeMeshData generateChain(NodeGraph& graph, NodeId nodeId);
+
 private:
     TreeMeshData* m_out = nullptr;
     NodeId        m_hlNode = INVALID_NODE;   // 被选中的高亮节点
     bool          m_hlCapture = false;       // 当前是否正在生成被选中节点"自身"的几何
     NodeId        m_curNode = INVALID_NODE;  // 当前正在生成几何的节点(供拾取三角标记归属)
+    // 标本模式: 生成 m_specimenRoot 时把它当作竖直挺立的主枝(原点+Y, 单实例, 无重力/枝领)。
+    NodeId        m_specimenRoot = INVALID_NODE;
+    // 叠加到所有随机种子上的偏移(标本变体用), 非标本导出时为 0 不影响正常生成。
+    int           m_specimenSeedOffset = 0;
+    // 标本参考父级尺寸(方案B): 由 measureSpecimenParent 在真实整株里测得, 令标本的
+    // 粗细/长细比与编辑器所见一致; 测不到时保留默认回退值。
+    float         m_specParentLen    = 4.0f;
+    float         m_specParentRadius = 0.3f;
+    // 测量遍历: 命中该节点首个实例时记录其 parentLen/attachRadius, 命中后置位不再重复。
+    NodeId        m_measureTarget = INVALID_NODE;
+    bool          m_measureDone   = false;
+    // 祖先链模式(导出"当前及上游"): 只生成 m_chainNodes 内的节点, 且各多实例节点只长一根。
+    bool          m_chainMode  = false;
+    std::set<NodeId> m_chainNodes;
     // 顶点风力烘焙: 当前节点的风力基权重与相位, 由 processNode 按节点类型/id 设置。
     float         m_windW = 0.0f;     // 该节点枝条风力基权重(尖端处再乘 tRing)
     float         m_windPhase = 0.0f; // 该节点相位偏移(按节点 id 哈希, 令相邻枝条不同步)
 
     MeshBatch& getBatch(const MaterialParams& mat, bool isLeaf);
 
+    // 方案B 标本测量: 在真实整株里跑一遍, 捕获 targetId 首个实例的父级长度/附着半径,
+    // 结果写入 m_specParentLen / m_specParentRadius。
+    void measureSpecimenParent(NodeGraph& graph, NodeId targetId);
     // 每次向 batch 追加几何后调用: 把 [iFrom,end) 的三角登记到拾取表(附带 m_curNode);
     // 若 m_hlCapture 为真, 再把 [vFrom,end) 顶点(pos+normal)镜像到高亮描边缓冲。
     void afterAppend(const MeshBatch& batch, size_t vFrom, size_t iFrom);

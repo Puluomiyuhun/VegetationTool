@@ -238,6 +238,10 @@ void writeNode(std::ostream& o, const TreeNode* n) {
     }
     case NodeType::Export: {
         const auto& p = static_cast<const ExportNode*>(n)->params;
+        o << "exportMode " << p.exportMode << '\n';
+        o << "specimenCount " << p.specimenCount << '\n';
+        o << "singleFile " << (p.singleFile ? 1 : 0) << '\n';
+        o << "specimenSpacing " << p.specimenSpacing << '\n';
         // path 放最后: value 取整行剩余(允许含空格路径)
         o << "path " << p.path << '\n';
         break;
@@ -445,6 +449,12 @@ void applyParams(TreeNode* n, const KV& kv) {
     }
     case NodeType::Export: {
         auto& p = static_cast<ExportNode*>(n)->params;
+        // 优先读新键 exportMode; 兼容旧工程: 无 exportMode 时用旧 exportWhole(1=整株→模式1)
+        int legacyWhole = getI(kv, "exportWhole", 0);
+        p.exportMode = getI(kv, "exportMode", legacyWhole != 0 ? 1 : 0);
+        p.specimenCount = getI(kv, "specimenCount", p.specimenCount);
+        p.singleFile = getI(kv, "singleFile", p.singleFile ? 1 : 0) != 0;
+        p.specimenSpacing = getF(kv, "specimenSpacing", p.specimenSpacing);
         std::string s = getS(kv, "path");
         if (!s.empty()) p.path = s;
         break;

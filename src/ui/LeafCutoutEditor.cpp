@@ -675,11 +675,44 @@ void LeafCutoutEditor::render(NodeGraph& graph) {
         if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
             if (hit >= 0) { m_dragIdx = hit; m_dragLoop = hitLoop; }
             else {
-                m_loops.clear();   // 空白处打点 → 切回单环手动模式
                 glm::vec2 uv = screenToUv(io.MousePos);
                 uv.x = std::clamp(uv.x, 0.0f, 1.0f);
                 uv.y = std::clamp(uv.y, 0.0f, 1.0f);
-                m_ring.push_back(uv);
+
+                // 已有闭合拓扑(手动环或自动多环, 点数>=3): 把新点插入到"最近的边"中间,
+                // 与邻近顶点相连, 而不是追加到环尾连到远处的起点; 且保留自动生成的多环,
+                // 使自动生成后仍能在其基础上继续增删点。
+                bool haveTopology = (m_ring.size() >= 3);
+                for (const auto& L : m_loops) if (L.size() >= 3) { haveTopology = true; break; }
+
+                if (haveTopology) {
+                    auto segDist2 = [](ImVec2 p, ImVec2 a, ImVec2 b) -> float {
+                        float vx=b.x-a.x, vy=b.y-a.y, wx=p.x-a.x, wy=p.y-a.y;
+                        float len2=vx*vx+vy*vy;
+                        float t = len2>0.f ? (wx*vx+wy*vy)/len2 : 0.f;
+                        t = std::clamp(t, 0.f, 1.f);
+                        float dx=p.x-(a.x+t*vx), dy=p.y-(a.y+t*vy);
+                        return dx*dx+dy*dy;
+                    };
+                    int   bestLoop = -1, bestSeg = 0;
+                    float bestD = 1e30f;
+                    auto scan = [&](const std::vector<glm::vec2>& ring, int loopId){
+                        int n = (int)ring.size();
+                        if (n < 3) return;
+                        for (int i = 0; i < n; ++i) {
+                            float d = segDist2(io.MousePos, uvToScreen(ring[i]),
+                                               uvToScreen(ring[(i+1)%n]));
+                            if (d < bestD) { bestD = d; bestLoop = loopId; bestSeg = i; }
+                        }
+                    };
+                    scan(m_ring, -1);
+                    for (int L = 0; L < (int)m_loops.size(); ++L) scan(m_loops[L], L);
+
+                    std::vector<glm::vec2>& tgt = (bestLoop < 0) ? m_ring : m_loops[bestLoop];
+                    tgt.insert(tgt.begin() + (bestSeg + 1), uv);
+                } else {
+                    m_ring.push_back(uv);   // 尚在勾勒首个环: 顺序追加
+                }
                 retriangulate();
             }
         }

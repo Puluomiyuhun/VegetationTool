@@ -211,9 +211,17 @@ struct FrondParams {
     bool                   requestEditCutout = false;  // 瞬时: UI 点击"编辑轮廓"后置 true, 打开编辑器后清零
 };
 
-// Export：模型导出节点。输入连接一个 Trunk, 代表该 Trunk 整棵树的模型。
-// 点击导出按钮时, 把该 Trunk 子树网格写出为 OBJ 文件。不参与几何生成。
+// Export：模型导出节点。输入连接图中任意一个节点。不参与几何生成。
+// 两种导出模式:
+//  - exportWhole=true : 从上游节点向上追溯到根 Trunk, 导出完整整株模型。
+//  - exportWhole=false: 以上游节点为"标本根", 导出该节点+其全部下游子枝叶组成的
+//    竖直向上标本(根部在原点, 主枝沿 +Y 挺立), 供 UE5.8 PCG 程序化种树用作枝叶标本。
 struct ExportParams {
     std::string path = "tree_export.obj";  // 导出文件路径
+    // 导出模式: 0=当前节点及下游(竖直标本); 1=整株(追溯到根 Trunk); 2=当前节点及上游(祖先链)
+    int         exportMode = 0;
+    int         specimenCount = 1;         // 标本模式: 用不同随机种子生成的变体数量
+    bool        singleFile = true;         // true=全部并排合到一个 obj; false=每变体一个文件(_序号后缀)
+    float       specimenSpacing = 3.0f;    // 单文件并排时相邻标本的间距(沿 X 轴)
     bool        requestExport = false;     // 瞬时标志: UI 点击后置 true, 导出完成清零
 };
