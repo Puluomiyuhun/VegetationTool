@@ -1,4 +1,4 @@
-# VegetationTool
+# SlowTree
 
 An open-source, node-based vegetation generation tool inspired by SpeedTree — built with C++17, OpenGL 3.3, and Dear ImGui.
 
@@ -128,7 +128,7 @@ src/
 & "C:\Program Files\CMake\bin\cmake.exe" --build E:\VegetationTool\build --config Release
 
 # Run
-E:\VegetationTool\build\Release\VegetationTool.exe
+E:\VegetationTool\build\Release\SlowTree.exe
 ```
 
 ### Dependencies (auto-installed via vcpkg)

@@ -21,7 +21,7 @@ BEGIN
             VALUE "FileDescription",  "SlowTree - Node-based Vegetation Generator"
             VALUE "FileVersion",      "0.1.0.0"
             VALUE "InternalName",     "VegetationTool"
-            VALUE "OriginalFilename", "VegetationTool.exe"
+            VALUE "OriginalFilename", "SlowTree.exe"
             VALUE "ProductName",      "SlowTree"
             VALUE "ProductVersion",   "0.1.0.0"
         END

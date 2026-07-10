@@ -31,7 +31,7 @@ Python。唯一的耦合点有两处，都很容易解耦：
               +-----------------+------------------+
               |                                    |
    +----------v-----------+            +-----------v-----------+
-   |  VegetationTool.exe  |            |  slowtree (.pyd)      |
+   |    SlowTree.exe      |            |  slowtree (.pyd)      |
    |  renderer/ ui/ app/  |            |  pybind11 绑定         |
    |  (GL + ImGui + GLFW) |            +-----------+-----------+
    +----------------------+                        |

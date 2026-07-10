@@ -41,6 +41,9 @@ endif()
 
 add_executable(${PROJECT_NAME} ${SOURCES})
 
+# exe 输出名为 SlowTree（VS 工程 target 名仍为 VegetationTool，避免大改工程）
+set_target_properties(${PROJECT_NAME} PROPERTIES OUTPUT_NAME "SlowTree")
+
 target_include_directories(${PROJECT_NAME} PRIVATE src/ ${Stb_INCLUDE_DIR})
 target_link_libraries(${PROJECT_NAME}
     PRIVATE
