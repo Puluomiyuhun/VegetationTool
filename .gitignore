@@ -34,3 +34,6 @@ __pycache__/
 
 # Lua source tarball (extracted to external/lua-5.4.7)
 external/lua.tar.gz
+
+# Exported sample meshes
+samples/*.obj

@@ -1,0 +1,1324 @@
+VEGTOOL 1
+NODE 1 2 569 199
+mode 0
+lengthRatio 0.382
+radiusScale 1
+endRatio 0.25
+baseFlare 2.2
+taperPow 1.5
+spreadAngle 50
+rotateOffset 137.5
+gravity 0.18
+regionStart 0.38
+sizeFalloff 0
+regionEnd 0.95
+noiseAmount 30
+noiseFreq 3
+gnarl 10
+branchCount 5
+intervalSpacing 0.12
+branchesPerNode 2
+jointCount 0
+jointBulge 0
+sides 6
+lengthSegs 6
+seed 2
+uvTilingU 1
+uvTilingV 1
+mat.albedo 0.32 0.18 0.08
+mat.roughness 0.509
+mat.metallic 0
+mat.aoStrength 1
+mat.sssStrength 0
+mat.alphaCutoff 0.5
+mat.baseColorTex C:\Program Files\SpeedTree\SpeedTree Modeler v10.0.0\samples\Games\Broadleaf\Bark\BaseBark_diffuse.png
+mat.roughnessTex 
+mat.normalTex C:\Program Files\SpeedTree\SpeedTree Modeler v10.0.0\samples\Games\Broadleaf\Bark\BaseBark_Depth_Normal.png
+mat.opacityTex 
+ENDNODE
+NODE 2 0 115 200
+length 6.178
+startRadius 0.372
+endRadius 0.079
+baseFlare 1.4
+posX 0
+posZ 0
+noiseAmount 90
+noiseFreq 3.272
+gnarl 15
+taperPow 1.6
+jointCount 0
+jointBulge 0
+sides 8
+lengthSegs 16
+seed 1
+uvTilingU 1
+uvTilingV 1
+mat.albedo 0.38 0.22 0.1
+mat.roughness 0.584
+mat.metallic 0
+mat.aoStrength 1
+mat.sssStrength 0
+mat.alphaCutoff 0.5
+mat.baseColorTex C:\Program Files\SpeedTree\SpeedTree Modeler v10.0.0\samples\Games\Broadleaf\Bark\BaseBark_diffuse.png
+mat.roughnessTex 
+mat.normalTex C:\Program Files\SpeedTree\SpeedTree Modeler v10.0.0\samples\Games\Broadleaf\Bark\BaseBark_Depth_Normal.png
+mat.opacityTex 
+ENDNODE
+NODE 3 2 297 199
+mode 0
+lengthRatio 0.714
+radiusScale 0.689
+endRatio 0.255
+baseFlare 2.05
+taperPow 0.729
+spreadAngle 48.386
+rotateOffset 154.322
+gravity 1
+regionStart 0.393
+sizeFalloff 0
+regionEnd 0.911
+noiseAmount 90
+noiseFreq 1.423
+gnarl 10
+branchCount 12
+intervalSpacing 0.12
+branchesPerNode 2
+jointCount 0
+jointBulge 0
+sides 10
+lengthSegs 6
+seed 2
+uvTilingU 1
+uvTilingV 1
+mat.albedo 0.32 0.18 0.08
+mat.roughness 0.586
+mat.metallic 0
+mat.aoStrength 1
+mat.sssStrength 0
+mat.alphaCutoff 0.5
+mat.baseColorTex C:\Program Files\SpeedTree\SpeedTree Modeler v10.0.0\samples\Games\Broadleaf\Bark\BaseBark_diffuse.png
+mat.roughnessTex 
+mat.normalTex C:\Program Files\SpeedTree\SpeedTree Modeler v10.0.0\samples\Games\Broadleaf\Bark\BaseBark_Depth_Normal.png
+mat.opacityTex 
+ENDNODE
+NODE 4 3 704 199
+lengthRatio 0.579
+radiusScale 0.559
+endRatio 0.25
+baseFlare 1.8
+taperPow 1.3
+spreadAngle 65
+rotateOffset 137.5
+gravity 0.25
+regionStart 0.204
+regionEnd 0.866
+noiseAmount 35
+noiseFreq 3.5
+gnarl 8
+twigCount 8
+sides 5
+lengthSegs 5
+alternating 1
+seed 3
+uvTilingU 1
+uvTilingV 1
+mat.albedo 0.28 0.16 0.07
+mat.roughness 0.9
+mat.metallic 0
+mat.aoStrength 1
+mat.sssStrength 0
+mat.alphaCutoff 0.5
+mat.baseColorTex C:\Program Files\SpeedTree\SpeedTree Modeler v10.0.0\samples\Games\Broadleaf\Bark\BaseBark_diffuse.png
+mat.roughnessTex 
+mat.normalTex C:\Program Files\SpeedTree\SpeedTree Modeler v10.0.0\samples\Games\Broadleaf\Bark\BaseBark_Depth_Normal.png
+mat.opacityTex 
+ENDNODE
+NODE 5 4 848 199
+leafCount 14
+clusterRadius 0.05
+leafSize 0.175
+leafAspect 0.65
+normalJitter 0.252
+normalSoften 0
+planar 0
+sizeFalloff 0
+seed 4
+useCutout 1
+mat.albedo 0.15 0.48 0.06
+mat.roughness 0.779
+mat.metallic 0
+mat.aoStrength 1
+mat.sssStrength 1
+mat.alphaCutoff 0.663
+mat.baseColorTex C:\Program Files\SpeedTree\SpeedTree Modeler v10.0.0\samples\Games\Broadleaf\Leaves\Front_01.png
+mat.roughnessTex 
+mat.normalTex C:\Program Files\SpeedTree\SpeedTree Modeler v10.0.0\samples\Games\Broadleaf\Leaves\Front_01_Normal_Winter.png
+mat.opacityTex C:\Program Files\SpeedTree\SpeedTree Modeler v10.0.0\samples\Games\Broadleaf\Leaves\Front_01_Opacity.png
+ENDNODE
+NODE 6 2 432 199
+mode 0
+lengthRatio 0.386
+radiusScale 0.395
+endRatio 0.25
+baseFlare 2.2
+taperPow 1.5
+spreadAngle 50
+rotateOffset 137.5
+gravity 0.18
+regionStart 0.392
+sizeFalloff 0
+regionEnd 0.95
+noiseAmount 90
+noiseFreq 2.019
+gnarl 10
+branchCount 8
+intervalSpacing 0.12
+branchesPerNode 2
+jointCount 0
+jointBulge 0
+sides 6
+lengthSegs 6
+seed 2
+uvTilingU 1
+uvTilingV 1
+mat.albedo 0.32 0.18 0.08
+mat.roughness 0.505
+mat.metallic 0
+mat.aoStrength 1
+mat.sssStrength 0
+mat.alphaCutoff 0.5
+mat.baseColorTex C:\Program Files\SpeedTree\SpeedTree Modeler v10.0.0\samples\Games\Broadleaf\Bark\BaseBark_diffuse.png
+mat.roughnessTex 
+mat.normalTex C:\Program Files\SpeedTree\SpeedTree Modeler v10.0.0\samples\Games\Broadleaf\Bark\BaseBark_Depth_Normal.png
+mat.opacityTex 
+ENDNODE
+NODE 7 1 297 119
+rootCount 5
+length 1.413
+radiusScale 0.34
+endRatio 0.08
+taperPow 1.76
+baseFlare 2.333
+collarSink 0.093
+spreadAngle 90
+gravity 5
+rotateOffset 140.864
+noiseAmount 90
+noiseFreq 1.668
+gnarl 17.467
+jointCount 0
+jointBulge 0
+sides 6
+lengthSegs 10
+seed 33
+uvTilingU 1
+uvTilingV 0.472
+mat.albedo 0.3 0.19 0.1
+mat.roughness 0.561
+mat.metallic 0
+mat.aoStrength 0.55
+mat.sssStrength 0
+mat.alphaCutoff 0.5
+mat.baseColorTex C:\Program Files\SpeedTree\SpeedTree Modeler v10.0.0\samples\Games\Broadleaf\Bark\BaseBark_diffuse.png
+mat.roughnessTex 
+mat.normalTex C:\Program Files\SpeedTree\SpeedTree Modeler v10.0.0\samples\Games\Broadleaf\Bark\BaseBark_Depth_Normal.png
+mat.opacityTex 
+ENDNODE
+NODE 8 0 131 647
+length 6.178
+startRadius 0.202
+endRadius 0.079
+baseFlare 1.4
+posX 10
+posZ 0
+noiseAmount 90
+noiseFreq 3.272
+gnarl 15
+taperPow 1.6
+jointCount 0
+jointBulge 0
+sides 8
+lengthSegs 16
+seed 1
+uvTilingU 1
+uvTilingV 1
+mat.albedo 0.38 0.22 0.1
+mat.roughness 0.584
+mat.metallic 0
+mat.aoStrength 1
+mat.sssStrength 0
+mat.alphaCutoff 0.5
+mat.baseColorTex C:\Program Files\SpeedTree\SpeedTree Modeler v10.0.0\samples\Games\Broadleaf\Bark\BaseBark_diffuse.png
+mat.roughnessTex 
+mat.normalTex C:\Program Files\SpeedTree\SpeedTree Modeler v10.0.0\samples\Games\Broadleaf\Bark\BaseBark_Depth_Normal.png
+mat.opacityTex 
+ENDNODE
+NODE 9 2 313 646
+mode 0
+lengthRatio 0.591
+radiusScale 0.725
+endRatio 0.255
+baseFlare 2.096
+taperPow 0.729
+spreadAngle 30.135
+rotateOffset 147.478
+gravity 1
+regionStart 0.439
+sizeFalloff 0
+regionEnd 0.911
+noiseAmount 90
+noiseFreq 1.594
+gnarl 10
+branchCount 10
+intervalSpacing 0.12
+branchesPerNode 2
+jointCount 0
+jointBulge 0
+sides 6
+lengthSegs 6
+seed 2
+uvTilingU 1
+uvTilingV 1
+mat.albedo 0.32 0.18 0.08
+mat.roughness 0.586
+mat.metallic 0
+mat.aoStrength 1
+mat.sssStrength 0
+mat.alphaCutoff 0.5
+mat.baseColorTex C:\Program Files\SpeedTree\SpeedTree Modeler v10.0.0\samples\Games\Broadleaf\Bark\BaseBark_diffuse.png
+mat.roughnessTex 
+mat.normalTex C:\Program Files\SpeedTree\SpeedTree Modeler v10.0.0\samples\Games\Broadleaf\Bark\BaseBark_Depth_Normal.png
+mat.opacityTex 
+ENDNODE
+NODE 10 3 713 646
+lengthRatio 0.579
+radiusScale 1
+endRatio 0.25
+baseFlare 1.8
+taperPow 1.3
+spreadAngle 65
+rotateOffset 137.5
+gravity 0.25
+regionStart 0.204
+regionEnd 0.866
+noiseAmount 35
+noiseFreq 3.5
+gnarl 8
+twigCount 5
+sides 5
+lengthSegs 5
+alternating 1
+seed 3
+uvTilingU 1
+uvTilingV 1
+mat.albedo 0.28 0.16 0.07
+mat.roughness 0.9
+mat.metallic 0
+mat.aoStrength 1
+mat.sssStrength 0
+mat.alphaCutoff 0.5
+mat.baseColorTex C:\Program Files\SpeedTree\SpeedTree Modeler v10.0.0\samples\Games\Broadleaf\Bark\BaseBark_diffuse.png
+mat.roughnessTex 
+mat.normalTex C:\Program Files\SpeedTree\SpeedTree Modeler v10.0.0\samples\Games\Broadleaf\Bark\BaseBark_Depth_Normal.png
+mat.opacityTex 
+ENDNODE
+NODE 11 2 585 646
+mode 0
+lengthRatio 0.382
+radiusScale 1
+endRatio 0.25
+baseFlare 2.2
+taperPow 1.5
+spreadAngle 50
+rotateOffset 137.5
+gravity 0.18
+regionStart 0.509
+sizeFalloff 0
+regionEnd 0.95
+noiseAmount 30
+noiseFreq 3
+gnarl 10
+branchCount 4
+intervalSpacing 0.12
+branchesPerNode 2
+jointCount 0
+jointBulge 0
+sides 6
+lengthSegs 6
+seed 2
+uvTilingU 1
+uvTilingV 1
+mat.albedo 0.32 0.18 0.08
+mat.roughness 0.669
+mat.metallic 0
+mat.aoStrength 1
+mat.sssStrength 0
+mat.alphaCutoff 0.5
+mat.baseColorTex C:\Program Files\SpeedTree\SpeedTree Modeler v10.0.0\samples\Games\Broadleaf\Bark\BaseBark_diffuse.png
+mat.roughnessTex 
+mat.normalTex C:\Program Files\SpeedTree\SpeedTree Modeler v10.0.0\samples\Games\Broadleaf\Bark\BaseBark_Depth_Normal.png
+mat.opacityTex 
+ENDNODE
+NODE 12 2 448 646
+mode 0
+lengthRatio 0.386
+radiusScale 0.395
+endRatio 0.25
+baseFlare 2.2
+taperPow 1.5
+spreadAngle 50
+rotateOffset 137.5
+gravity 0.18
+regionStart 0.392
+sizeFalloff 0
+regionEnd 0.844
+noiseAmount 90
+noiseFreq 2.019
+gnarl 10
+branchCount 8
+intervalSpacing 0.12
+branchesPerNode 2
+jointCount 0
+jointBulge 0
+sides 6
+lengthSegs 6
+seed 2
+uvTilingU 1
+uvTilingV 1
+mat.albedo 0.32 0.18 0.08
+mat.roughness 0.505
+mat.metallic 0
+mat.aoStrength 1
+mat.sssStrength 0
+mat.alphaCutoff 0.5
+mat.baseColorTex C:\Program Files\SpeedTree\SpeedTree Modeler v10.0.0\samples\Games\Broadleaf\Bark\BaseBark_diffuse.png
+mat.roughnessTex 
+mat.normalTex C:\Program Files\SpeedTree\SpeedTree Modeler v10.0.0\samples\Games\Broadleaf\Bark\BaseBark_Depth_Normal.png
+mat.opacityTex 
+ENDNODE
+NODE 13 1 313 566
+rootCount 5
+length 1.413
+radiusScale 0.34
+endRatio 0.08
+taperPow 1.8
+baseFlare 2.567
+collarSink 0.377
+spreadAngle 90
+gravity 1
+rotateOffset 140.864
+noiseAmount 90
+noiseFreq 1.668
+gnarl 17.467
+jointCount 0
+jointBulge 0
+sides 6
+lengthSegs 10
+seed 33
+uvTilingU 1
+uvTilingV 0.472
+mat.albedo 0.3 0.19 0.1
+mat.roughness 0.561
+mat.metallic 0
+mat.aoStrength 0.55
+mat.sssStrength 0
+mat.alphaCutoff 0.5
+mat.baseColorTex C:\Program Files\SpeedTree\SpeedTree Modeler v10.0.0\samples\Games\Broadleaf\Bark\BaseBark_diffuse.png
+mat.roughnessTex 
+mat.normalTex C:\Program Files\SpeedTree\SpeedTree Modeler v10.0.0\samples\Games\Broadleaf\Bark\BaseBark_Depth_Normal.png
+mat.opacityTex 
+ENDNODE
+NODE 14 4 858 647
+leafCount 7
+clusterRadius 0.05
+leafSize 0.189
+leafAspect 0.65
+normalJitter 0.252
+normalSoften 0
+planar 0
+sizeFalloff 0
+seed 4
+useCutout 0
+mat.albedo 0.15 0.48 0.06
+mat.roughness 0.883
+mat.metallic 0
+mat.aoStrength 1
+mat.sssStrength 1
+mat.alphaCutoff 0.663
+mat.baseColorTex C:\Program Files\SpeedTree\SpeedTree Modeler v10.0.0\samples\Games\Broadleaf\Leaves\Front_01.png
+mat.roughnessTex 
+mat.normalTex C:\Program Files\SpeedTree\SpeedTree Modeler v10.0.0\samples\Games\Broadleaf\Leaves\Front_01_Normal_Winter.png
+mat.opacityTex C:\Program Files\SpeedTree\SpeedTree Modeler v10.0.0\samples\Games\Broadleaf\Leaves\Front_01_Opacity.png
+ENDNODE
+NODE 15 0 129 1031
+length 8
+startRadius 0.05
+endRadius 0.016
+baseFlare 1
+posX 15
+posZ 0
+noiseAmount 13.346
+noiseFreq 0.1
+gnarl 0
+taperPow 0.5
+jointCount 0
+jointBulge 0
+sides 8
+lengthSegs 16
+seed 1
+uvTilingU 1
+uvTilingV 8
+mat.albedo 0.38 0.22 0.1
+mat.roughness 0.584
+mat.metallic 0
+mat.aoStrength 1
+mat.sssStrength 0
+mat.alphaCutoff 0.5
+mat.baseColorTex F:\MyWork\SD\test25_Bamboo\bamboo_diffuse.png
+mat.roughnessTex 
+mat.normalTex F:\MyWork\SD\test25_Bamboo\bamboo_normal.png
+mat.opacityTex 
+ENDNODE
+NODE 16 0 1130 135
+length 1
+startRadius 0.001
+endRadius 0
+baseFlare 1.4
+posX 15
+posZ 5
+noiseAmount 0
+noiseFreq 3.272
+gnarl 15
+taperPow 1.6
+jointCount 0
+jointBulge 0
+sides 8
+lengthSegs 16
+seed 1
+uvTilingU 1
+uvTilingV 3
+mat.albedo 0.38 0.22 0.1
+mat.roughness 0.584
+mat.metallic 0
+mat.aoStrength 1
+mat.sssStrength 0
+mat.alphaCutoff 0.5
+mat.baseColorTex C:\Program Files\SpeedTree\SpeedTree Modeler v10.0.0\samples\Games\Broadleaf\Bark\BaseBark_diffuse.png
+mat.roughnessTex 
+mat.normalTex C:\Program Files\SpeedTree\SpeedTree Modeler v10.0.0\samples\Games\Broadleaf\Bark\BaseBark_Depth_Normal.png
+mat.opacityTex 
+ENDNODE
+NODE 17 5 1274 135
+lengthRatio 2
+radiusScale 0.515
+endRatio 0.228
+taperPow 1.2
+spreadAngle 30.97
+rotateOffset 137.5
+gravity 3
+regionStart 0
+regionEnd 0.075
+noiseAmount 12
+noiseFreq 2
+gnarl 5
+spineCount 10
+sides 5
+lengthSegs 12
+seed 6
+uvTilingU 1
+uvTilingV 1
+mat.albedo 0.22 0.42 0.1
+mat.roughness 0.7
+mat.metallic 0
+mat.aoStrength 0.45
+mat.sssStrength 0.2
+mat.alphaCutoff 0.5
+mat.baseColorTex C:\Program Files\SpeedTree\SpeedTree Modeler v10.0.0\samples\Games\Broadleaf\Bark\Oak_Bark_1.png
+mat.roughnessTex 
+mat.normalTex 
+mat.opacityTex 
+ENDNODE
+NODE 18 6 1409 135
+width 0.65
+widthBase 0.177
+widthTip 0
+profilePow 1.047
+curl 0
+segsPerSide 1
+serrate 0
+serrateDepth 0.226
+seed 7
+useCutout 0
+mat.albedo 0.16 0.5 0.07
+mat.roughness 0.72
+mat.metallic 0
+mat.aoStrength 0.4
+mat.sssStrength 0.506
+mat.alphaCutoff 0.5
+mat.baseColorTex C:\Users\puluomi002\Desktop\Moss\T_Moss_Single_BC.png
+mat.roughnessTex 
+mat.normalTex 
+mat.opacityTex 
+ENDNODE
+NODE 19 6 1409 215
+width 0.404
+widthBase 0.177
+widthTip 0
+profilePow 1.047
+curl 0
+segsPerSide 1
+serrate 0
+serrateDepth 0.226
+seed 7
+useCutout 0
+mat.albedo 0.16 0.5 0.07
+mat.roughness 0.72
+mat.metallic 0
+mat.aoStrength 0.4
+mat.sssStrength 0.5
+mat.alphaCutoff 0.5
+mat.baseColorTex C:\Users\puluomi002\Desktop\Moss\T_Moss_Single_BC.png
+mat.roughnessTex 
+mat.normalTex 
+mat.opacityTex 
+ENDNODE
+NODE 20 5 1274 215
+lengthRatio 1.292
+radiusScale 0.515
+endRatio 0.228
+taperPow 1.2
+spreadAngle 31.273
+rotateOffset 223.737
+gravity 2
+regionStart 0.236
+regionEnd 0.259
+noiseAmount 90
+noiseFreq 1.458
+gnarl 5
+spineCount 3
+sides 5
+lengthSegs 12
+seed 6
+uvTilingU 1
+uvTilingV 1
+mat.albedo 0.22 0.42 0.1
+mat.roughness 0.7
+mat.metallic 0
+mat.aoStrength 0.45
+mat.sssStrength 0.2
+mat.alphaCutoff 0.5
+mat.baseColorTex C:\Program Files\SpeedTree\SpeedTree Modeler v10.0.0\samples\Games\Broadleaf\Bark\Oak_Bark_1.png
+mat.roughnessTex 
+mat.normalTex 
+mat.opacityTex 
+ENDNODE
+NODE 21 2 293 1031
+mode 6
+lengthRatio 0.196
+radiusScale 0.257
+endRatio 0.25
+baseFlare 1.789
+taperPow 1.5
+spreadAngle 41.634
+rotateOffset 70.428
+gravity 2
+regionStart 0.249
+sizeFalloff 0.601
+regionEnd 1
+noiseAmount 31.483
+noiseFreq 1.099
+gnarl 11.635
+branchCount 4
+intervalSpacing 0.124
+branchesPerNode 3
+jointCount 0
+jointBulge 0
+sides 6
+lengthSegs 8
+seed 2
+uvTilingU 1
+uvTilingV 6
+mat.albedo 0.32 0.18 0.08
+mat.roughness 0.88
+mat.metallic 0
+mat.aoStrength 0.55
+mat.sssStrength 0
+mat.alphaCutoff 0.5
+mat.baseColorTex F:\MyWork\SD\test25_Bamboo\bamboo_diffuse.png
+mat.roughnessTex 
+mat.normalTex 
+mat.opacityTex 
+ENDNODE
+NODE 22 2 426 1031
+mode 0
+lengthRatio 0.398
+radiusScale 0.234
+endRatio 0.25
+baseFlare 2.2
+taperPow 1.5
+spreadAngle 14.563
+rotateOffset 127.918
+gravity 1.5
+regionStart 0.147
+sizeFalloff 0
+regionEnd 0.498
+noiseAmount 42.091
+noiseFreq 0.576
+gnarl 10
+branchCount 4
+intervalSpacing 0.12
+branchesPerNode 2
+jointCount 0
+jointBulge 0
+sides 6
+lengthSegs 6
+seed 2
+uvTilingU 1
+uvTilingV 6
+mat.albedo 0.32 0.18 0.08
+mat.roughness 0.88
+mat.metallic 0
+mat.aoStrength 0.55
+mat.sssStrength 0
+mat.alphaCutoff 0.5
+mat.baseColorTex F:\MyWork\SD\test25_Bamboo\bamboo_diffuse.png
+mat.roughnessTex 
+mat.normalTex 
+mat.opacityTex 
+ENDNODE
+NODE 23 4 650 1031
+leafCount 15
+clusterRadius 0
+leafSize 0.417
+leafAspect 0.176
+normalJitter 1
+normalSoften 0
+planar 0
+sizeFalloff 0.738
+seed 4
+useCutout 0
+mat.albedo 0.15 0.48 0.06
+mat.roughness 0.75
+mat.metallic 0
+mat.aoStrength 0.4
+mat.sssStrength 0.45
+mat.alphaCutoff 0.5
+mat.baseColorTex C:\Program Files\SpeedTree\SpeedTree Modeler v10.0.0\samples\Games\Broadleaf\Leaves\Front_01.png
+mat.roughnessTex 
+mat.normalTex 
+mat.opacityTex C:\Program Files\SpeedTree\SpeedTree Modeler v10.0.0\samples\Games\Broadleaf\Leaves\Front_01_Opacity.png
+ENDNODE
+NODE 24 2 1297 567
+mode 0
+lengthRatio 0.331
+radiusScale 0.35
+endRatio 0.25
+baseFlare 2.2
+taperPow 1.5
+spreadAngle 82
+rotateOffset 137.5
+gravity -0.45
+regionStart 0.3
+sizeFalloff 0.92
+regionEnd 1
+noiseAmount 56.197
+noiseFreq 2.261
+gnarl 8
+branchCount 40
+intervalSpacing 0.12
+branchesPerNode 2
+jointCount 0
+jointBulge 0
+sides 6
+lengthSegs 6
+seed 2
+uvTilingU 1
+uvTilingV 2
+mat.albedo 0.32 0.18 0.08
+mat.roughness 0.586
+mat.metallic 0
+mat.aoStrength 1
+mat.sssStrength 0
+mat.alphaCutoff 0.5
+mat.baseColorTex C:\Program Files\SpeedTree\SpeedTree Modeler v10.0.0\samples\Games\Conifer\Bark\Pine_Bark_1.png
+mat.roughnessTex 
+mat.normalTex C:\Program Files\SpeedTree\SpeedTree Modeler v10.0.0\samples\Games\Conifer\Bark\Pine_Bark_1_Normal.png
+mat.opacityTex 
+ENDNODE
+NODE 25 0 1146 567
+length 11
+startRadius 0.2
+endRadius 0.03
+baseFlare 1.4
+posX 20
+posZ 0
+noiseAmount 10
+noiseFreq 2.5
+gnarl 6
+taperPow 1.3
+jointCount 0
+jointBulge 0
+sides 10
+lengthSegs 10
+seed 1
+uvTilingU 1
+uvTilingV 3
+mat.albedo 0.38 0.22 0.1
+mat.roughness 0.584
+mat.metallic 0
+mat.aoStrength 1
+mat.sssStrength 0
+mat.alphaCutoff 0.5
+mat.baseColorTex C:\Program Files\SpeedTree\SpeedTree Modeler v10.0.0\samples\Games\Conifer\Bark\Pine_Bark_1.png
+mat.roughnessTex 
+mat.normalTex C:\Program Files\SpeedTree\SpeedTree Modeler v10.0.0\samples\Games\Conifer\Bark\Pine_Bark_1_Normal.png
+mat.opacityTex 
+ENDNODE
+NODE 26 2 1441 567
+mode 0
+lengthRatio 0.175
+radiusScale 0.404
+endRatio 0.255
+baseFlare 2.096
+taperPow 0.729
+spreadAngle 49.812
+rotateOffset 154.322
+gravity 0.535
+regionStart 0
+sizeFalloff 0.167
+regionEnd 0.688
+noiseAmount 90
+noiseFreq 1.594
+gnarl 10
+branchCount 6
+intervalSpacing 0.12
+branchesPerNode 2
+jointCount 0
+jointBulge 0
+sides 6
+lengthSegs 6
+seed 2
+uvTilingU 1
+uvTilingV 1
+mat.albedo 0.32 0.18 0.08
+mat.roughness 0.586
+mat.metallic 0
+mat.aoStrength 1
+mat.sssStrength 0
+mat.alphaCutoff 0.5
+mat.baseColorTex C:\Program Files\SpeedTree\SpeedTree Modeler v10.0.0\samples\Games\Conifer\Bark\Pine_Bark_1.png
+mat.roughnessTex 
+mat.normalTex C:\Program Files\SpeedTree\SpeedTree Modeler v10.0.0\samples\Games\Conifer\Bark\Pine_Bark_1_Normal.png
+mat.opacityTex 
+ENDNODE
+NODE 27 6 1761 557
+width 0.46
+widthBase 1
+widthTip 1
+profilePow 0.2
+curl 0
+segsPerSide 3
+serrate 0
+serrateDepth 0.25
+seed 7
+useCutout 0
+mat.albedo 0.16 0.5 0.07
+mat.roughness 0.72
+mat.metallic 0
+mat.aoStrength 1
+mat.sssStrength 0
+mat.alphaCutoff 0.236
+mat.baseColorTex C:\Program Files\SpeedTree\SpeedTree Modeler v10.0.0\samples\Games\Conifer\Cluster\Needle_Cluster_1\Needle_Cluster_1.png
+mat.roughnessTex 
+mat.normalTex C:\Program Files\SpeedTree\SpeedTree Modeler v10.0.0\samples\Games\Conifer\Cluster\Needle_Cluster_1\Needle_Cluster_1_Normal.png
+mat.opacityTex C:\Program Files\SpeedTree\SpeedTree Modeler v10.0.0\samples\Games\Conifer\Cluster\Needle_Cluster_1\Needle_Cluster_1_Opacity.png
+ENDNODE
+NODE 28 5 1601 573
+lengthRatio 3
+radiusScale 1
+endRatio 0.2
+taperPow 1.405
+spreadAngle 10
+rotateOffset 115.302
+gravity 0
+regionStart 0.537
+regionEnd 0.821
+noiseAmount 90
+noiseFreq 2.029
+gnarl 5
+spineCount 2
+sides 5
+lengthSegs 12
+seed 6
+uvTilingU 1
+uvTilingV 1
+mat.albedo 0.22 0.42 0.1
+mat.roughness 0.7
+mat.metallic 0
+mat.aoStrength 0.45
+mat.sssStrength 0.2
+mat.alphaCutoff 0.5
+mat.baseColorTex 
+mat.roughnessTex 
+mat.normalTex 
+mat.opacityTex 
+ENDNODE
+NODE 29 6 1761 653
+width 0.494
+widthBase 1
+widthTip 1
+profilePow 0.87
+curl 0.821
+segsPerSide 3
+serrate 0
+serrateDepth 0.25
+seed 7
+useCutout 0
+mat.albedo 0.16 0.5 0.07
+mat.roughness 0.72
+mat.metallic 0
+mat.aoStrength 1
+mat.sssStrength 0
+mat.alphaCutoff 0.236
+mat.baseColorTex C:\Program Files\SpeedTree\SpeedTree Modeler v10.0.0\samples\Games\Conifer\Cluster\Needle_Cluster_1\Needle_Cluster_1.png
+mat.roughnessTex 
+mat.normalTex C:\Program Files\SpeedTree\SpeedTree Modeler v10.0.0\samples\Games\Conifer\Cluster\Needle_Cluster_1\Needle_Cluster_1_Normal.png
+mat.opacityTex C:\Program Files\SpeedTree\SpeedTree Modeler v10.0.0\samples\Games\Conifer\Cluster\Needle_Cluster_1\Needle_Cluster_1_Opacity.png
+ENDNODE
+NODE 30 0 2033 119
+length 7.232
+startRadius 0.097
+endRadius 0.072
+baseFlare 1.4
+posX 25
+posZ 0
+noiseAmount 22.928
+noiseFreq 1.042
+gnarl 15
+taperPow 1.6
+jointCount 0
+jointBulge 0
+sides 8
+lengthSegs 16
+seed 1
+uvTilingU 1
+uvTilingV 8
+mat.albedo 0.38 0.22 0.1
+mat.roughness 0.584
+mat.metallic 0
+mat.aoStrength 1
+mat.sssStrength 0
+mat.alphaCutoff 0.5
+mat.baseColorTex C:\Program Files\SpeedTree\SpeedTree Modeler v10.0.0\samples\Games\Conifer\Bark\Pine_Bark_1.png
+mat.roughnessTex 
+mat.normalTex C:\Program Files\SpeedTree\SpeedTree Modeler v10.0.0\samples\Games\Conifer\Bark\Pine_Bark_1_Normal.png
+mat.opacityTex 
+ENDNODE
+NODE 31 5 2225 199
+lengthRatio 0.505
+radiusScale 0.05
+endRatio 0.01
+taperPow 1.2
+spreadAngle 35.247
+rotateOffset 137.5
+gravity 3
+regionStart 0.917
+regionEnd 0.95
+noiseAmount 12
+noiseFreq 2
+gnarl 5
+spineCount 7
+sides 5
+lengthSegs 12
+seed 6
+uvTilingU 1
+uvTilingV 1
+mat.albedo 0.22 0.42 0.1
+mat.roughness 0.7
+mat.metallic 0
+mat.aoStrength 0.45
+mat.sssStrength 0.2
+mat.alphaCutoff 0.5
+mat.baseColorTex 
+mat.roughnessTex 
+mat.normalTex 
+mat.opacityTex 
+ENDNODE
+NODE 32 5 2225 295
+lengthRatio 0.6
+radiusScale 0.05
+endRatio 0.01
+taperPow 1.2
+spreadAngle 29.772
+rotateOffset 151.188
+gravity 6
+regionStart 0.871
+regionEnd 0.923
+noiseAmount 12
+noiseFreq 2
+gnarl 5
+spineCount 8
+sides 5
+lengthSegs 12
+seed 194
+uvTilingU 1
+uvTilingV 1
+mat.albedo 0.22 0.42 0.1
+mat.roughness 0.7
+mat.metallic 0
+mat.aoStrength 0.45
+mat.sssStrength 0.2
+mat.alphaCutoff 0.5
+mat.baseColorTex 
+mat.roughnessTex 
+mat.normalTex 
+mat.opacityTex 
+ENDNODE
+NODE 33 6 2401 199
+width 1
+widthBase 0.15
+widthTip 0
+profilePow 0.6
+curl 0
+segsPerSide 1
+serrate 0
+serrateDepth 0.25
+seed 7
+useCutout 0
+mat.albedo 0.16 0.5 0.07
+mat.roughness 0.3
+mat.metallic 0
+mat.aoStrength 0.4
+mat.sssStrength 0.5
+mat.alphaCutoff 0.5
+mat.baseColorTex C:\Program Files\SpeedTree\SpeedTree Modeler v10.0.0\samples\Games\Palm\Clusters\Whole_Frond_Cluster\Palm_Cluster_2.png
+mat.roughnessTex 
+mat.normalTex C:\Program Files\SpeedTree\SpeedTree Modeler v10.0.0\samples\Games\Palm\Clusters\Whole_Frond_Cluster\Palm_Cluster_2_Normal.png
+mat.opacityTex C:\Program Files\SpeedTree\SpeedTree Modeler v10.0.0\samples\Games\Palm\Clusters\Whole_Frond_Cluster\Palm_Cluster_2_Opacity.png
+ENDNODE
+NODE 34 6 2401 295
+width 1
+widthBase 0.15
+widthTip 0
+profilePow 0.6
+curl 0
+segsPerSide 1
+serrate 0
+serrateDepth 0.25
+seed 7
+useCutout 0
+mat.albedo 0.16 0.5 0.07
+mat.roughness 0.342
+mat.metallic 0
+mat.aoStrength 0.4
+mat.sssStrength 0.5
+mat.alphaCutoff 0.5
+mat.baseColorTex C:\Program Files\SpeedTree\SpeedTree Modeler v10.0.0\samples\Games\Palm\Clusters\Whole_Frond_Cluster\Palm_Cluster_2.png
+mat.roughnessTex 
+mat.normalTex C:\Program Files\SpeedTree\SpeedTree Modeler v10.0.0\samples\Games\Palm\Clusters\Whole_Frond_Cluster\Palm_Cluster_2_Normal.png
+mat.opacityTex C:\Program Files\SpeedTree\SpeedTree Modeler v10.0.0\samples\Games\Palm\Clusters\Whole_Frond_Cluster\Palm_Cluster_2_Opacity.png
+ENDNODE
+NODE 35 6 2401 375
+width 1
+widthBase 0.15
+widthTip 0
+profilePow 0.6
+curl 0
+segsPerSide 1
+serrate 0
+serrateDepth 0.25
+seed 7
+useCutout 0
+mat.albedo 0.16 0.5 0.07
+mat.roughness 0.266
+mat.metallic 0
+mat.aoStrength 0.4
+mat.sssStrength 0.5
+mat.alphaCutoff 0.5
+mat.baseColorTex C:\Program Files\SpeedTree\SpeedTree Modeler v10.0.0\samples\Games\Palm\Clusters\Whole_Frond_Cluster\Palm_Cluster_2.png
+mat.roughnessTex 
+mat.normalTex C:\Program Files\SpeedTree\SpeedTree Modeler v10.0.0\samples\Games\Palm\Clusters\Whole_Frond_Cluster\Palm_Cluster_2_Normal.png
+mat.opacityTex C:\Program Files\SpeedTree\SpeedTree Modeler v10.0.0\samples\Games\Palm\Clusters\Whole_Frond_Cluster\Palm_Cluster_2_Opacity.png
+ENDNODE
+NODE 36 5 2225 375
+lengthRatio 0.446
+radiusScale 0.05
+endRatio 0.01
+taperPow 1.2
+spreadAngle 48.023
+rotateOffset 151.188
+gravity 4.5
+regionStart 0.825
+regionEnd 0.916
+noiseAmount 12
+noiseFreq 2
+gnarl 5
+spineCount 5
+sides 5
+lengthSegs 12
+seed 194
+uvTilingU 1
+uvTilingV 1
+mat.albedo 0.22 0.42 0.1
+mat.roughness 0.7
+mat.metallic 0
+mat.aoStrength 0.45
+mat.sssStrength 0.2
+mat.alphaCutoff 0.5
+mat.baseColorTex 
+mat.roughnessTex 
+mat.normalTex 
+mat.opacityTex 
+ENDNODE
+NODE 37 5 2225 119
+lengthRatio 0.505
+radiusScale 0.05
+endRatio 0.01
+taperPow 1.2
+spreadAngle 21.255
+rotateOffset 137.5
+gravity 3.5
+regionStart 0.94
+regionEnd 0.95
+noiseAmount 12
+noiseFreq 2
+gnarl 5
+spineCount 6
+sides 5
+lengthSegs 12
+seed 6
+uvTilingU 1
+uvTilingV 1
+mat.albedo 0.22 0.42 0.1
+mat.roughness 0.7
+mat.metallic 0
+mat.aoStrength 0.45
+mat.sssStrength 0.2
+mat.alphaCutoff 0.5
+mat.baseColorTex 
+mat.roughnessTex 
+mat.normalTex 
+mat.opacityTex 
+ENDNODE
+NODE 38 6 2401 119
+width 1
+widthBase 0.15
+widthTip 0
+profilePow 0.6
+curl 0
+segsPerSide 1
+serrate 0
+serrateDepth 0.25
+seed 7
+useCutout 0
+mat.albedo 0.16 0.5 0.07
+mat.roughness 0.285
+mat.metallic 0
+mat.aoStrength 0.4
+mat.sssStrength 0.5
+mat.alphaCutoff 0.5
+mat.baseColorTex C:\Program Files\SpeedTree\SpeedTree Modeler v10.0.0\samples\Games\Palm\Clusters\Whole_Frond_Cluster\Palm_Cluster_2.png
+mat.roughnessTex 
+mat.normalTex C:\Program Files\SpeedTree\SpeedTree Modeler v10.0.0\samples\Games\Palm\Clusters\Whole_Frond_Cluster\Palm_Cluster_2_Normal.png
+mat.opacityTex C:\Program Files\SpeedTree\SpeedTree Modeler v10.0.0\samples\Games\Palm\Clusters\Whole_Frond_Cluster\Palm_Cluster_2_Opacity.png
+ENDNODE
+NODE 39 6 2401 471
+width 0.797
+widthBase 0.15
+widthTip 0
+profilePow 0.6
+curl 0
+segsPerSide 1
+serrate 0
+serrateDepth 0.25
+seed 7
+useCutout 0
+mat.albedo 0.16 0.5 0.07
+mat.roughness 0.266
+mat.metallic 0
+mat.aoStrength 0.4
+mat.sssStrength 0.5
+mat.alphaCutoff 0.5
+mat.baseColorTex C:\Program Files\SpeedTree\SpeedTree Modeler v10.0.0\samples\Games\Palm\Clusters\Whole_Frond_Cluster\Palm_Cluster_2_deadb.png
+mat.roughnessTex 
+mat.normalTex C:\Program Files\SpeedTree\SpeedTree Modeler v10.0.0\samples\Games\Palm\Clusters\Whole_Frond_Cluster\Palm_Cluster_2_dead_Normal.png
+mat.opacityTex C:\Program Files\SpeedTree\SpeedTree Modeler v10.0.0\samples\Games\Palm\Clusters\Whole_Frond_Cluster\Palm_Cluster_2_dead_Opacity.png
+ENDNODE
+NODE 40 5 2225 471
+lengthRatio 0.35
+radiusScale 0.05
+endRatio 0.01
+taperPow 1.2
+spreadAngle 73.27
+rotateOffset 151.188
+gravity 6
+regionStart 0.799
+regionEnd 0.87
+noiseAmount 12
+noiseFreq 2
+gnarl 5
+spineCount 9
+sides 5
+lengthSegs 12
+seed 194
+uvTilingU 1
+uvTilingV 1
+mat.albedo 0.22 0.42 0.1
+mat.roughness 0.7
+mat.metallic 0
+mat.aoStrength 0.45
+mat.sssStrength 0.2
+mat.alphaCutoff 0.5
+mat.baseColorTex 
+mat.roughnessTex 
+mat.normalTex 
+mat.opacityTex 
+ENDNODE
+NODE 41 6 1105 903
+width 1
+widthBase 0.15
+widthTip 0
+profilePow 0.6
+curl 0
+segsPerSide 1
+serrate 0
+serrateDepth 0.25
+seed 7
+useCutout 0
+mat.albedo 0.16 0.5 0.07
+mat.roughness 0.266
+mat.metallic 0
+mat.aoStrength 0.4
+mat.sssStrength 0.5
+mat.alphaCutoff 0.5
+mat.baseColorTex C:\Program Files\SpeedTree\SpeedTree Modeler v10.0.0\samples\Games\Palm\Clusters\Whole_Frond_Cluster\Palm_Cluster_2.png
+mat.roughnessTex 
+mat.normalTex C:\Program Files\SpeedTree\SpeedTree Modeler v10.0.0\samples\Games\Palm\Clusters\Whole_Frond_Cluster\Palm_Cluster_2_Normal.png
+mat.opacityTex C:\Program Files\SpeedTree\SpeedTree Modeler v10.0.0\samples\Games\Palm\Clusters\Whole_Frond_Cluster\Palm_Cluster_2_Opacity.png
+ENDNODE
+NODE 42 1 1297 647
+rootCount 6
+length 1.114
+radiusScale 0.409
+endRatio 0.08
+taperPow 1.8
+baseFlare 2.5
+collarSink 0.3
+spreadAngle 74.703
+gravity 4
+rotateOffset 137.5
+noiseAmount 90
+noiseFreq 7.344
+gnarl 7.871
+jointCount 0
+jointBulge 0
+sides 6
+lengthSegs 10
+seed 5
+uvTilingU 1
+uvTilingV 0.197
+mat.albedo 0.3 0.19 0.1
+mat.roughness 0.9
+mat.metallic 0
+mat.aoStrength 0.55
+mat.sssStrength 0
+mat.alphaCutoff 0.5
+mat.baseColorTex C:\Program Files\SpeedTree\SpeedTree Modeler v10.0.0\samples\Games\Conifer\Bark\Pine_Bark_1.png
+mat.roughnessTex 
+mat.normalTex C:\Program Files\SpeedTree\SpeedTree Modeler v10.0.0\samples\Games\Conifer\Bark\Pine_Bark_1_Normal.png
+mat.opacityTex 
+ENDNODE
+NODE 43 4 1663 157
+leafCount 20
+clusterRadius 0.35
+leafSize 0.22
+leafAspect 0.65
+normalJitter 0.35
+normalSoften 0
+planar 0
+sizeFalloff 0
+seed 4
+useCutout 1
+mat.albedo 0.15 0.48 0.06
+mat.roughness 0.75
+mat.metallic 0
+mat.aoStrength 0.4
+mat.sssStrength 0.45
+mat.alphaCutoff 0.5
+mat.baseColorTex C:\Users\puluomi002\Desktop\Moss\T_Moss_Single_BC.png
+mat.roughnessTex 
+mat.normalTex 
+mat.opacityTex 
+ENDNODE
+LINK 1 4
+LINK 2 3
+LINK 2 7
+LINK 3 6
+LINK 4 5
+LINK 6 1
+LINK 8 9
+LINK 8 13
+LINK 9 12
+LINK 10 14
+LINK 11 10
+LINK 12 11
+LINK 15 21
+LINK 16 17
+LINK 16 20
+LINK 17 18
+LINK 20 19
+LINK 21 22
+LINK 22 23
+LINK 24 26
+LINK 25 24
+LINK 25 42
+LINK 26 28
+LINK 28 27
+LINK 28 29
+LINK 30 31
+LINK 30 32
+LINK 30 36
+LINK 30 37
+LINK 30 40
+LINK 31 33
+LINK 32 34
+LINK 36 35
+LINK 37 38
+LINK 40 39
+COMMENT 80 80 991 360
+树1
+ENDCOMMENT
+COMMENT 96 512 992 376
+树2
+ENDCOMMENT
+COMMENT 96 960 784 412
+竹子
+ENDCOMMENT
+COMMENT 1104 80 528 360
+蕨
+ENDCOMMENT
+COMMENT 1104 512 880 364
+松树
+ENDCOMMENT
+COMMENT 2016 80 608 716
+椰树
+ENDCOMMENT
+LIGHTING
+lightDir 0.431934 0.863868 0.259161
+lightColor 1 0.915789 0.789474
+lightIntensity 3
+ambientStrength 1.4
+exposure 1.3
+ambientTop 0.280696 0.417676 0.554656
+ambientBot 0.12 0.1 0.08
+skyTop 0.35 0.52 0.78
+skyHorizon 0.78 0.76 0.7
+skyGround 0.45749 0.425632 0.377846
+shadowEnabled 1
+shadowStrength 1
+shadowBias 0.0025
+groundShadowStrength 0.343
+groundEnabled 1
+groundAlpha 0.693
+ENDLIGHTING
