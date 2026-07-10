@@ -6,6 +6,8 @@
     "glad",
     "glm",
     "stb",
+    "cpp-httplib",
+    "nlohmann-json",
     {
       "name": "imgui",
       "features": [

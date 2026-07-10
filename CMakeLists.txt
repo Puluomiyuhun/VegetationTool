@@ -16,6 +16,8 @@ find_package(glad CONFIG REQUIRED)
 find_package(glm CONFIG REQUIRED)
 find_package(imgui CONFIG REQUIRED)
 find_package(Stb REQUIRED)
+find_package(httplib CONFIG REQUIRED)
+find_package(nlohmann_json CONFIG REQUIRED)
 
 # ---- imgui-node-editor（手动集成） ----
 set(NE_DIR ${CMAKE_SOURCE_DIR}/external/imgui-node-editor)
@@ -42,6 +44,8 @@ target_link_libraries(${PROJECT_NAME}
         glm::glm
         imgui::imgui
         imgui_node_editor
+        httplib::httplib
+        nlohmann_json::nlohmann_json
 )
 if(WIN32)
     target_link_libraries(${PROJECT_NAME} PRIVATE opengl32 comdlg32)

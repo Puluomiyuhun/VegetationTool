@@ -27,3 +27,7 @@ Thumbs.db
 
 # Compiled shaders cache
 *.spv
+
+# Python
+__pycache__/
+*.pyc

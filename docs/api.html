@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SlowTree · API 参考文档</title>
+<style>
+  :root{
+    --green:#4caf50; --green-d:#2e7d32; --green-l:#e8f5e9;
+    --blue:#4285f4; --ink:#1f2329; --muted:#646a73; --line:#e5e6eb;
+    --bg:#fafbfc; --code-bg:#1e2430; --code-ink:#e6edf3;
+    --sidebar:264px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    color:var(--ink);background:var(--bg);line-height:1.7;-webkit-font-smoothing:antialiased;
+  }
+  a{color:inherit;text-decoration:none}
+  code,pre{font-family:"SFMono-Regular",Consolas,"Liberation Mono",Menlo,monospace}
+
+  /* 顶栏 */
+  header{
+    position:sticky;top:0;z-index:50;height:56px;background:rgba(255,255,255,.9);
+    backdrop-filter:blur(12px);border-bottom:1px solid var(--line);
+    display:flex;align-items:center;
+  }
+  header .wrap{display:flex;align-items:center;justify-content:space-between;width:100%;padding:0 22px}
+  .logo{display:flex;align-items:center;gap:9px;font-weight:700;font-size:18px}
+  .logo .leaf{font-size:22px}
+  .logo small{font-weight:500;color:var(--muted);font-size:13px;margin-left:4px}
+  .top-links{display:flex;gap:20px;font-size:14px;color:var(--muted)}
+  .top-links a:hover{color:var(--green-d)}
+  .top-links .gh{color:var(--green-d);font-weight:600}
+
+  /* 布局 */
+  .layout{display:flex;max-width:1240px;margin:0 auto}
+  /* 侧边栏 */
+  aside{
+    width:var(--sidebar);flex-shrink:0;position:sticky;top:56px;align-self:flex-start;
+    height:calc(100vh - 56px);overflow-y:auto;padding:26px 16px 60px 22px;
+    border-right:1px solid var(--line);font-size:14px;
+  }
+  aside .grp{margin-bottom:22px}
+  aside .grp-t{font-size:12px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:#9aa0a6;margin-bottom:8px}
+  aside a{display:block;padding:5px 10px;border-radius:7px;color:var(--muted);margin-bottom:1px}
+  aside a:hover{background:var(--green-l);color:var(--green-d)}
+  aside a code{font-size:12.5px;color:inherit}
+  @media(max-width:900px){aside{display:none}}
+
+  /* 主体 */
+  main{flex:1;min-width:0;padding:38px 40px 100px}
+  @media(max-width:900px){main{padding:28px 20px 80px}}
+  main h1{font-size:34px;letter-spacing:-.5px;margin-bottom:10px}
+  main .subtitle{color:var(--muted);font-size:17px;margin-bottom:28px}
+  main h2{
+    font-size:24px;margin:46px 0 6px;padding-top:12px;letter-spacing:-.3px;
+    border-top:1px solid var(--line);
+  }
+  main h2:first-of-type{border-top:none}
+  main h3{font-size:17px;margin:26px 0 8px}
+  main p{margin-bottom:12px;color:#3a3f47}
+  main ul{margin:8px 0 14px 22px}
+  main li{margin-bottom:5px;color:#3a3f47}
+
+  /* 内联代码 */
+  code.ic{background:#eef1f4;color:#c7254e;padding:1.5px 6px;border-radius:5px;font-size:13.5px}
+  /* 代码块 */
+  pre.blk{
+    background:var(--code-bg);color:var(--code-ink);border-radius:10px;
+    padding:16px 18px;overflow-x:auto;font-size:13.5px;line-height:1.6;margin:12px 0 18px;
+  }
+  pre.blk .c{color:#7d8590}
+  pre.blk .k{color:#79c0ff}
+  pre.blk .s{color:#a5d6ff}
+
+  /* 方法标签 */
+  .method{
+    display:inline-block;font-size:12px;font-weight:700;padding:2px 9px;border-radius:6px;
+    margin-right:8px;vertical-align:middle;letter-spacing:.5px;
+  }
+  .m-post{background:#e8f5e9;color:#2e7d32}
+  .m-get{background:#e8f0fe;color:#1a56c4}
+
+  /* 端点卡 */
+  .ep{border:1px solid var(--line);border-radius:12px;margin:16px 0;overflow:hidden;background:#fff}
+  .ep-head{
+    display:flex;align-items:center;gap:6px;padding:12px 16px;background:#fbfcfd;
+    border-bottom:1px solid var(--line);font-family:"SFMono-Regular",Consolas,monospace;
+  }
+  .ep-head .name{font-weight:700;font-size:15px}
+  .ep-body{padding:14px 16px}
+  .ep-body p{margin-bottom:8px}
+  .ep-body p:last-child{margin-bottom:0}
+
+  /* 表格 */
+  table{border-collapse:collapse;width:100%;margin:10px 0 16px;font-size:14px}
+  th,td{border:1px solid var(--line);padding:8px 12px;text-align:left;vertical-align:top}
+  th{background:#f4f6f8;font-weight:600}
+  td code, th code{background:#eef1f4;padding:1px 5px;border-radius:4px;font-size:13px}
+
+  /* callout */
+  .note{
+    border-left:4px solid var(--green);background:var(--green-l);border-radius:10px;
+    padding:13px 16px;margin:16px 0;font-size:14.5px;color:#254d28;
+  }
+  .warn{border-left-color:#f5a623;background:#fff4e5;color:#5c4a1f}
+  .note code{background:rgba(0,0,0,.06);padding:1px 5px;border-radius:4px}
+
+  footer{border-top:1px solid var(--line);padding:26px 40px;color:#9aa0a6;font-size:13px;text-align:center}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <a class="logo" href="index.html"><span class="leaf">🌳</span> SlowTree <small>API 参考</small></a>
+    <nav class="top-links">
+      <a href="index.html">← 返回首页</a>
+      <a class="gh" href="https://github.com/Puluomiyuhun/VegetationTool" target="_blank" rel="noopener">GitHub ↗</a>
+    </nav>
+  </div>
+</header>
+
+<div class="layout">
+  <!-- 侧边栏 -->
+  <aside>
+    <div class="grp">
+      <div class="grp-t">开始</div>
+      <a href="#intro">概述</a>
+      <a href="#transport">连接与传输</a>
+      <a href="#envelope">请求 / 响应格式</a>
+      <a href="#errors">错误处理</a>
+      <a href="#types">节点类型枚举</a>
+    </div>
+    <div class="grp">
+      <div class="grp-t">系统</div>
+      <a href="#ping"><code>ping</code></a>
+      <a href="#health"><code>GET /health</code></a>
+    </div>
+    <div class="grp">
+      <div class="grp-t">节点图</div>
+      <a href="#graph.list"><code>graph.list</code></a>
+      <a href="#node.add"><code>node.add</code></a>
+      <a href="#node.addChild"><code>node.addChild</code></a>
+      <a href="#node.remove"><code>node.remove</code></a>
+      <a href="#link.add"><code>link.add</code></a>
+      <a href="#link.remove"><code>link.remove</code></a>
+      <a href="#node.select"><code>node.select</code></a>
+    </div>
+    <div class="grp">
+      <div class="grp-t">参数</div>
+      <a href="#node.getParams"><code>node.getParams</code></a>
+      <a href="#node.setParams"><code>node.setParams</code></a>
+    </div>
+    <div class="grp">
+      <div class="grp-t">工程 / 导出</div>
+      <a href="#project.new"><code>project.new</code></a>
+      <a href="#project.buildDefault"><code>project.buildDefault</code></a>
+      <a href="#project.save"><code>project.save</code></a>
+      <a href="#project.load"><code>project.load</code></a>
+      <a href="#export.trigger"><code>export.trigger</code></a>
+      <a href="#render.screenshot"><code>render.screenshot</code></a>
+    </div>
+  </aside>
+
+  <!-- 正文 -->
+  <main>
+    <h1>SlowTree API 参考</h1>
+    <p class="subtitle">通过一套本地 HTTP 接口远程操控编辑器：增删节点、连线、调参、导出、抓取渲染截图 —— 让脚本或 AI 助手直接"动手"造树。</p>
+
+    <h2 id="intro">概述</h2>
+    <p>SlowTree 编辑器内嵌了一个轻量 HTTP 服务（<code class="ic">ApiServer</code>），运行在后台线程上。外部程序把请求发到本地端口，服务把命令投递到<b>主线程命令队列</b>，在下一帧安全地操作节点图与 OpenGL 上下文，再把结果回传。整套接口的设计目标是：</p>
+    <ul>
+      <li><b>可编程</b> —— 任意语言只要能发 HTTP 请求即可驱动编辑器；</li>
+      <li><b>可自动化</b> —— 批量生成、参数扫描、流水线接入；</li>
+      <li><b>面向 AI</b> —— 配合 MCP，让 Claude 这样的助手用自然语言连节点、调参数，并通过 <code class="ic">render.screenshot</code> "看"结果继续迭代。</li>
+    </ul>
+
+    <div class="note">
+      🧵 <b>线程模型：</b>HTTP 请求到达后被打包成命令入队，由编辑器主循环每帧 <code>drain()</code> 取出执行（节点图与 GL 均非线程安全，必须在主线程操作）。调用方会同步等待结果，<b>超时 10 秒</b>。
+    </div>
+
+    <h2 id="transport">连接与传输</h2>
+    <table>
+      <tr><th>项目</th><th>值</th></tr>
+      <tr><td>协议</td><td>HTTP/1.1</td></tr>
+      <tr><td>地址</td><td><code>127.0.0.1</code>（仅本机）</td></tr>
+      <tr><td>默认端口</td><td><code>8765</code></td></tr>
+      <tr><td>RPC 端点</td><td><code>POST /rpc</code></td></tr>
+      <tr><td>健康检查</td><td><code>GET /health</code></td></tr>
+      <tr><td>内容类型</td><td><code>application/json</code></td></tr>
+    </table>
+    <p>所有业务方法都通过同一个 <code class="ic">POST /rpc</code> 端点调用，用请求体里的 <code class="ic">method</code> 字段区分。</p>
+
+    <h2 id="envelope">请求 / 响应格式</h2>
+    <h3>请求体</h3>
+<pre class="blk">{
+  <span class="k">"method"</span>: <span class="s">"node.add"</span>,
+  <span class="k">"params"</span>: { <span class="s">"type"</span>: <span class="s">"Branch"</span>, <span class="k">"x"</span>: 120, <span class="k">"y"</span>: 40 }
+}</pre>
+    <h3>成功响应</h3>
+<pre class="blk">{ <span class="k">"ok"</span>: <span class="k">true</span>, <span class="k">"result"</span>: { <span class="k">"id"</span>: 12 } }</pre>
+    <h3>失败响应</h3>
+<pre class="blk">{ <span class="k">"ok"</span>: <span class="k">false</span>, <span class="k">"error"</span>: <span class="s">"node not found"</span> }</pre>
+    <p>下文每个方法的"返回"一栏描述的是 <code class="ic">result</code> 字段的内容。</p>
+
+    <h3>调用示例（curl）</h3>
+<pre class="blk"><span class="c"># 添加一个枝条节点</span>
+curl -s http://127.0.0.1:8765/rpc \
+  -H <span class="s">"Content-Type: application/json"</span> \
+  -d <span class="s">'{"method":"node.add","params":{"type":"Branch"}}'</span></pre>
+
+    <h3>调用示例（Python）</h3>
+<pre class="blk"><span class="k">import</span> httpx
+
+<span class="k">def</span> rpc(method, params=None):
+    r = httpx.post(<span class="s">"http://127.0.0.1:8765/rpc"</span>,
+                   json={<span class="s">"method"</span>: method, <span class="s">"params"</span>: params <span class="k">or</span> {}})
+    data = r.json()
+    <span class="k">if</span> <span class="k">not</span> data[<span class="s">"ok"</span>]:
+        <span class="k">raise</span> RuntimeError(data[<span class="s">"error"</span>])
+    <span class="k">return</span> data[<span class="s">"result"</span>]
+
+trunk  = rpc(<span class="s">"graph.list"</span>)
+branch = rpc(<span class="s">"node.add"</span>, {<span class="s">"type"</span>: <span class="s">"Branch"</span>})[<span class="s">"id"</span>]</pre>
+
+    <h2 id="errors">错误处理</h2>
+    <p>任何方法内部抛出的异常都会被捕获，包装成 <code class="ic">{ "ok": false, "error": "&lt;消息&gt;" }</code>。常见错误：</p>
+    <ul>
+      <li><code class="ic">unknown method: xxx</code> —— 方法名拼写错误；</li>
+      <li><code class="ic">node not found</code> —— 传入的节点 id 不存在；</li>
+      <li><code class="ic">invalid or missing 'type'</code> —— 节点类型缺失或非法；</li>
+      <li><code class="ic">timeout waiting for main thread</code> —— 主线程 10 秒内未处理（编辑器卡住或未运行）；</li>
+      <li><code class="ic">framebuffer not ready</code> —— 视口尚未渲染出首帧就请求截图。</li>
+    </ul>
+
+    <h2 id="types">节点类型枚举</h2>
+    <p>凡是需要 <code class="ic">type</code> 的方法，均可传<b>字符串名</b>或<b>整数序号</b>：</p>
+    <table>
+      <tr><th>序号</th><th>名称</th><th>说明</th></tr>
+      <tr><td>0</td><td><code>Trunk</code></td><td>树干（根节点，无输入）</td></tr>
+      <tr><td>1</td><td><code>Roots</code></td><td>根系</td></tr>
+      <tr><td>2</td><td><code>Branch</code></td><td>枝条</td></tr>
+      <tr><td>3</td><td><code>Twig</code></td><td>细枝</td></tr>
+      <tr><td>4</td><td><code>LeafCluster</code></td><td>叶簇</td></tr>
+      <tr><td>5</td><td><code>Spine</code></td><td>叶轴（羽叶脊线）</td></tr>
+      <tr><td>6</td><td><code>Frond</code></td><td>羽叶</td></tr>
+      <tr><td>7</td><td><code>Export</code></td><td>导出节点</td></tr>
+    </table>
+    <div class="note">
+      🌲 <b>连接逻辑</b>就是"谁长在谁身上"：<code>Trunk → Branch → Twig → LeafCluster</code>。每个节点有 1 个输出针脚和 1 个输入针脚；<code>link.add</code> 推荐直接用节点 id。
+    </div>
+
+    <!-- ===================== 系统 ===================== -->
+    <h2 id="ping">系统方法</h2>
+
+    <div class="ep" id="ping-ep">
+      <div class="ep-head"><span class="method m-post">POST</span><span class="name">ping</span></div>
+      <div class="ep-body">
+        <p>连通性探测，确认编辑器 API 在线。</p>
+        <p><b>参数：</b>无</p>
+        <p><b>返回：</b><code class="ic">{ "pong": true, "app": "SlowTree" }</code></p>
+      </div>
+    </div>
+
+    <div class="ep" id="health">
+      <div class="ep-head"><span class="method m-get">GET</span><span class="name">/health</span></div>
+      <div class="ep-body">
+        <p>不走 RPC 封装的裸健康检查端点，直接返回 <code class="ic">{"ok":true}</code>，适合做存活探针。</p>
+      </div>
+    </div>
+
+    <!-- ===================== 节点图 ===================== -->
+    <h2 id="graph.list">节点图</h2>
+
+    <div class="ep">
+      <div class="ep-head"><span class="method m-post">POST</span><span class="name">graph.list</span></div>
+      <div class="ep-body">
+        <p>列出当前图中全部节点与连线，以及当前选中节点。</p>
+        <p><b>参数：</b>无</p>
+        <p><b>返回：</b></p>
+<pre class="blk">{
+  <span class="k">"nodes"</span>: [ { <span class="k">"id"</span>:1, <span class="k">"type"</span>:0, <span class="k">"typeName"</span>:<span class="s">"Trunk"</span>,
+             <span class="k">"label"</span>:<span class="s">"Trunk"</span>, <span class="k">"x"</span>:0, <span class="k">"y"</span>:0 }, ... ],
+  <span class="k">"links"</span>: [ { <span class="k">"id"</span>:100000, <span class="k">"fromPin"</span>:10001, <span class="k">"toPin"</span>:10002,
+             <span class="k">"fromNode"</span>:1, <span class="k">"toNode"</span>:2 }, ... ],
+  <span class="k">"selected"</span>: 1
+}</pre>
+      </div>
+    </div>
+
+    <div class="ep" id="node.add">
+      <div class="ep-head"><span class="method m-post">POST</span><span class="name">node.add</span></div>
+      <div class="ep-body">
+        <p>新建一个节点（不自动连线）。</p>
+        <table>
+          <tr><th>参数</th><th>类型</th><th>必填</th><th>说明</th></tr>
+          <tr><td><code>type</code></td><td>string / int</td><td>是</td><td>节点类型，见枚举表</td></tr>
+          <tr><td><code>x</code></td><td>number</td><td>否</td><td>编辑器 X 坐标，默认 0</td></tr>
+          <tr><td><code>y</code></td><td>number</td><td>否</td><td>编辑器 Y 坐标，默认 0</td></tr>
+        </table>
+        <p><b>返回：</b><code class="ic">{ "id": &lt;新节点 id&gt; }</code></p>
+      </div>
+    </div>
+
+    <div class="ep" id="node.addChild">
+      <div class="ep-head"><span class="method m-post">POST</span><span class="name">node.addChild</span></div>
+      <div class="ep-body">
+        <p>在指定父节点下新建子节点并<b>自动连线</b>（父输出 → 子输入），是搭建结构最方便的方式。</p>
+        <table>
+          <tr><th>参数</th><th>类型</th><th>必填</th><th>说明</th></tr>
+          <tr><td><code>parentId</code></td><td>int</td><td>是</td><td>父节点 id</td></tr>
+          <tr><td><code>type</code></td><td>string / int</td><td>是</td><td>子节点类型</td></tr>
+        </table>
+        <p><b>返回：</b><code class="ic">{ "id": &lt;新节点 id&gt; }</code></p>
+      </div>
+    </div>
+
+    <div class="ep" id="node.remove">
+      <div class="ep-head"><span class="method m-post">POST</span><span class="name">node.remove</span></div>
+      <div class="ep-body">
+        <p>删除节点（及其相关连线）。</p>
+        <table>
+          <tr><th>参数</th><th>类型</th><th>必填</th><th>说明</th></tr>
+          <tr><td><code>id</code></td><td>int</td><td>是</td><td>要删除的节点 id</td></tr>
+        </table>
+        <p><b>返回：</b><code class="ic">{ "removed": &lt;id&gt; }</code></p>
+      </div>
+    </div>
+
+    <div class="ep" id="link.add">
+      <div class="ep-head"><span class="method m-post">POST</span><span class="name">link.add</span></div>
+      <div class="ep-body">
+        <p>连接两个节点。支持两种写法：</p>
+        <ul>
+          <li><b>推荐</b>：用节点 id —— <code class="ic">{ "fromNode": 1, "toNode": 2 }</code>（内部取 from 的输出针脚 → to 的首个输入针脚）；</li>
+          <li>底层：直接用针脚 id —— <code class="ic">{ "fromPin": 10001, "toPin": 10002 }</code>。</li>
+        </ul>
+        <p><b>返回：</b><code class="ic">{ "id": &lt;新连线 id&gt; }</code></p>
+      </div>
+    </div>
+
+    <div class="ep" id="link.remove">
+      <div class="ep-head"><span class="method m-post">POST</span><span class="name">link.remove</span></div>
+      <div class="ep-body">
+        <p>删除一条连线。</p>
+        <table>
+          <tr><th>参数</th><th>类型</th><th>必填</th><th>说明</th></tr>
+          <tr><td><code>id</code></td><td>int</td><td>是</td><td>连线 id</td></tr>
+        </table>
+        <p><b>返回：</b><code class="ic">{ "removed": &lt;id&gt; }</code></p>
+      </div>
+    </div>
+
+    <div class="ep" id="node.select">
+      <div class="ep-head"><span class="method m-post">POST</span><span class="name">node.select</span></div>
+      <div class="ep-body">
+        <p>设置当前选中节点（相当于在 UI 里点一下它，右侧参数面板会切换到该节点）。传 <code class="ic">0</code> 取消选中。</p>
+        <table>
+          <tr><th>参数</th><th>类型</th><th>必填</th><th>说明</th></tr>
+          <tr><td><code>id</code></td><td>int</td><td>是</td><td>节点 id（0 = 取消选中）</td></tr>
+        </table>
+        <p><b>返回：</b><code class="ic">{ "selected": &lt;id&gt; }</code></p>
+      </div>
+    </div>
+
+    <!-- ===================== 参数 ===================== -->
+    <h2 id="node.getParams">参数读写</h2>
+    <div class="note">
+      🔑 参数以<b>键值对</b>形式读写，键名与工程文件（<code>.vtree</code>）及 UI 完全一致。这意味着<b>任意节点的所有字段都可读可写</b>，无需额外映射。先用 <code>node.getParams</code> 拿到全部键名，再有选择地 <code>node.setParams</code>。
+    </div>
+
+    <div class="ep">
+      <div class="ep-head"><span class="method m-post">POST</span><span class="name">node.getParams</span></div>
+      <div class="ep-body">
+        <p>读取节点的全部参数。</p>
+        <table>
+          <tr><th>参数</th><th>类型</th><th>必填</th><th>说明</th></tr>
+          <tr><td><code>id</code></td><td>int</td><td>是</td><td>节点 id</td></tr>
+        </table>
+        <p><b>返回：</b>节点基本信息 + <code class="ic">params</code> 对象（值均为字符串）：</p>
+<pre class="blk">{
+  <span class="k">"id"</span>:1, <span class="k">"type"</span>:0, <span class="k">"typeName"</span>:<span class="s">"Trunk"</span>, <span class="k">"label"</span>:<span class="s">"Trunk"</span>, <span class="k">"x"</span>:0, <span class="k">"y"</span>:0,
+  <span class="k">"params"</span>: { <span class="k">"length"</span>:<span class="s">"8.0"</span>, <span class="k">"jointCount"</span>:<span class="s">"12"</span>, <span class="k">"gnarl"</span>:<span class="s">"2.0"</span>, ... }
+}</pre>
+      </div>
+    </div>
+
+    <div class="ep" id="node.setParams">
+      <div class="ep-head"><span class="method m-post">POST</span><span class="name">node.setParams</span></div>
+      <div class="ep-body">
+        <p>批量写入节点参数。只需传要改的键；数字、布尔、字符串都接受（内部统一转字符串后按 <code>.vtree</code> 规则解析）。写入后自动 <code class="ic">markDirty()</code>，下一帧重新生成网格。</p>
+        <table>
+          <tr><th>参数</th><th>类型</th><th>必填</th><th>说明</th></tr>
+          <tr><td><code>id</code></td><td>int</td><td>是</td><td>节点 id</td></tr>
+          <tr><td><code>params</code></td><td>object</td><td>是</td><td>键值对，键名同 getParams</td></tr>
+        </table>
+        <p><b>示例（把树干调成竹子）：</b></p>
+<pre class="blk">{
+  <span class="k">"method"</span>: <span class="s">"node.setParams"</span>,
+  <span class="k">"params"</span>: {
+    <span class="k">"id"</span>: 1,
+    <span class="k">"params"</span>: { <span class="k">"length"</span>:8.0, <span class="k">"jointCount"</span>:12, <span class="k">"jointBulge"</span>:0.4, <span class="k">"gnarl"</span>:2.0 }
+  }
+}</pre>
+        <p><b>返回：</b><code class="ic">{ "updated": &lt;id&gt;, "applied": &lt;写入键数&gt; }</code></p>
+      </div>
+    </div>
+
+    <!-- ===================== 工程 / 导出 ===================== -->
+    <h2 id="project.new">工程 / 导出</h2>
+
+    <div class="ep">
+      <div class="ep-head"><span class="method m-post">POST</span><span class="name">project.new</span></div>
+      <div class="ep-body">
+        <p>清空当前图，得到一张空白工程。</p>
+        <p><b>参数：</b>无　<b>返回：</b><code class="ic">{ "ok": true }</code></p>
+      </div>
+    </div>
+
+    <div class="ep" id="project.buildDefault">
+      <div class="ep-head"><span class="method m-post">POST</span><span class="name">project.buildDefault</span></div>
+      <div class="ep-body">
+        <p>清空并重建默认模板树（一棵搭好的样板树），常作为造树的起点。</p>
+        <p><b>参数：</b>无　<b>返回：</b><code class="ic">{ "ok": true }</code></p>
+      </div>
+    </div>
+
+    <div class="ep" id="project.save">
+      <div class="ep-head"><span class="method m-post">POST</span><span class="name">project.save</span></div>
+      <div class="ep-body">
+        <p>把当前工程（含光照设置）保存为 <code>.vtree</code> 文件。</p>
+        <table>
+          <tr><th>参数</th><th>类型</th><th>必填</th><th>说明</th></tr>
+          <tr><td><code>path</code></td><td>string</td><td>是</td><td>保存路径</td></tr>
+        </table>
+        <p><b>返回：</b><code class="ic">{ "saved": "&lt;path&gt;" }</code></p>
+      </div>
+    </div>
+
+    <div class="ep" id="project.load">
+      <div class="ep-head"><span class="method m-post">POST</span><span class="name">project.load</span></div>
+      <div class="ep-body">
+        <p>从 <code>.vtree</code> 文件加载工程。</p>
+        <table>
+          <tr><th>参数</th><th>类型</th><th>必填</th><th>说明</th></tr>
+          <tr><td><code>path</code></td><td>string</td><td>是</td><td>工程文件路径</td></tr>
+        </table>
+        <p><b>返回：</b><code class="ic">{ "loaded": "&lt;path&gt;" }</code></p>
+      </div>
+    </div>
+
+    <div class="ep" id="export.trigger">
+      <div class="ep-head"><span class="method m-post">POST</span><span class="name">export.trigger</span></div>
+      <div class="ep-body">
+        <p>触发一个 <code>Export</code> 节点导出 OBJ（在下一帧执行）。不指定 <code class="ic">id</code> 时用图中第一个 Export 节点。</p>
+        <table>
+          <tr><th>参数</th><th>类型</th><th>必填</th><th>说明</th></tr>
+          <tr><td><code>id</code></td><td>int</td><td>否</td><td>指定的 Export 节点 id</td></tr>
+          <tr><td><code>path</code></td><td>string</td><td>否</td><td>覆盖导出路径</td></tr>
+        </table>
+        <p><b>返回：</b><code class="ic">{ "triggered": &lt;id&gt;, "path": "&lt;导出路径&gt;" }</code></p>
+      </div>
+    </div>
+
+    <div class="ep" id="render.screenshot">
+      <div class="ep-head"><span class="method m-post">POST</span><span class="name">render.screenshot</span></div>
+      <div class="ep-body">
+        <p>抓取视口最近一帧的渲染结果。可写到文件、或以 base64 返回（便于 AI "看"到画面继续迭代）。两者可同时开启。</p>
+        <table>
+          <tr><th>参数</th><th>类型</th><th>必填</th><th>说明</th></tr>
+          <tr><td><code>path</code></td><td>string</td><td>否</td><td>PNG 输出路径</td></tr>
+          <tr><td><code>base64</code></td><td>bool</td><td>否</td><td>是否返回 base64；缺省时"有 path 则不返回、无 path 则返回"</td></tr>
+        </table>
+        <p><b>返回：</b></p>
+<pre class="blk">{
+  <span class="k">"width"</span>: 960, <span class="k">"height"</span>: 600,
+  <span class="k">"path"</span>: <span class="s">"C:/tmp/shot.png"</span>,        <span class="c">// 若写了文件</span>
+  <span class="k">"mime"</span>: <span class="s">"image/png"</span>,             <span class="c">// 若返回 base64</span>
+  <span class="k">"base64"</span>: <span class="s">"iVBORw0KGgo..."</span>
+}</pre>
+        <div class="warn note">⚠️ 若视口还没渲染出首帧就调用，会返回 <code>framebuffer not ready</code>。阴影 pass 不含风力，截图为静态一帧。</div>
+      </div>
+    </div>
+
+    <div class="note" style="margin-top:40px">
+      🤖 <b>配合 MCP：</b>把这套 HTTP 接口包一层 MCP 服务器，即可让 Claude 等 AI 助手用自然语言造树 —— 连节点、调参、导出，并通过 <code>render.screenshot</code> 观察结果再迭代。相关设计见仓库中的 <code>PYTHON_API.md</code>。
+    </div>
+
+  </main>
+</div>
+
+<footer>
+  SlowTree · API 参考文档　|　接口仍在持续演进，以仓库最新实现为准
+</footer>
+
+</body>
+</html>

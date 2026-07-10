@@ -19,17 +19,18 @@ static std::string openImageFileDialog() {
         return std::string(szFile);
     return std::string();
 }
-// OBJ 保存对话框：返回选中的保存路径(自动补 .obj)；取消返回空串
-static std::string saveObjFileDialog(const std::string& initial) {
+// 网格保存对话框：返回选中的保存路径(自动补扩展名)；取消返回空串。fbx=true 时过滤 FBX。
+static std::string saveMeshFileDialog(const std::string& initial, bool fbx) {
     char szFile[1024] = {0};
     strncpy(szFile, initial.c_str(), sizeof(szFile)-1);
     OPENFILENAMEA ofn = {0};
     ofn.lStructSize = sizeof(ofn);
     ofn.lpstrFile   = szFile;
     ofn.nMaxFile    = sizeof(szFile);
-    ofn.lpstrFilter = "Wavefront OBJ\0*.obj\0All\0*.*\0";
+    ofn.lpstrFilter = fbx ? "FBX (ASCII)\0*.fbx\0All\0*.*\0"
+                          : "Wavefront OBJ\0*.obj\0All\0*.*\0";
     ofn.nFilterIndex = 1;
-    ofn.lpstrDefExt = "obj";
+    ofn.lpstrDefExt = fbx ? "fbx" : "obj";
     ofn.Flags = OFN_OVERWRITEPROMPT | OFN_NOCHANGEDIR;
     if (GetSaveFileNameA(&ofn))
         return std::string(szFile);
@@ -37,7 +38,7 @@ static std::string saveObjFileDialog(const std::string& initial) {
 }
 #else
 static std::string openImageFileDialog() { return std::string(); }
-static std::string saveObjFileDialog(const std::string&) { return std::string(); }
+static std::string saveMeshFileDialog(const std::string&, bool) { return std::string(); }
 #endif
 
 // 公共：绘制 MaterialParams 滑条，返回是否有变化
@@ -362,7 +363,24 @@ bool FrondNode::drawProperties() {
 ExportNode::ExportNode() { type = NodeType::Export; }
 
 bool ExportNode::drawProperties() {
-    ImGui::TextWrapped("把上游连接的节点导出为 OBJ 网格。");
+    ImGui::TextWrapped("把上游连接的节点导出为三维网格 (含材质与贴图)。");
+    ImGui::Spacing();
+
+    // 导出格式
+    ImGui::TextDisabled("导出格式");
+    int prevFormat = params.format;
+    ImGui::RadioButton("OBJ (+ .mtl 材质)", &params.format, 0);
+    ImGui::SameLine();
+    ImGui::RadioButton("FBX (含材质/贴图)", &params.format, 1);
+    if (params.format != prevFormat) {
+        // 切换格式时同步规整路径扩展名
+        const char* want = params.format == 1 ? ".fbx" : ".obj";
+        size_t dot = params.path.find_last_of('.');
+        size_t slash = params.path.find_last_of("/\\");
+        if (dot != std::string::npos && (slash == std::string::npos || dot > slash))
+            params.path = params.path.substr(0, dot);
+        params.path += want;
+    }
     ImGui::Spacing();
 
     ImGui::TextDisabled("导出模式");
@@ -404,12 +422,12 @@ bool ExportNode::drawProperties() {
         params.path = buf;
     ImGui::SameLine();
     if (ImGui::Button("...##exportbrowse")) {
-        std::string sel = saveObjFileDialog(params.path);
+        std::string sel = saveMeshFileDialog(params.path, params.format == 1);
         if (!sel.empty()) params.path = sel;
     }
 
     ImGui::Spacing();
-    if (ImGui::Button("Export OBJ", ImVec2(-1, 0)))
+    if (ImGui::Button(params.format == 1 ? "Export FBX" : "Export OBJ", ImVec2(-1, 0)))
         params.requestExport = true;   // 由 Application 每帧检查并执行
 
     // 属性变更不需要重建网格, 恒返回 false

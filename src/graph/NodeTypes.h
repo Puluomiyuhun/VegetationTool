@@ -218,6 +218,7 @@ struct FrondParams {
 //    竖直向上标本(根部在原点, 主枝沿 +Y 挺立), 供 UE5.8 PCG 程序化种树用作枝叶标本。
 struct ExportParams {
     std::string path = "tree_export.obj";  // 导出文件路径
+    int         format = 0;                // 导出格式: 0=OBJ(+mtl); 1=FBX(ASCII)
     // 导出模式: 0=当前节点及下游(竖直标本); 1=整株(追溯到根 Trunk); 2=当前节点及上游(祖先链)
     int         exportMode = 0;
     int         specimenCount = 1;         // 标本模式: 用不同随机种子生成的变体数量

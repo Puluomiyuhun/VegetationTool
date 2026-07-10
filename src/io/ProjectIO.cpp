@@ -6,6 +6,9 @@
 #include <sstream>
 #include <unordered_map>
 #include <vector>
+#include <filesystem>
+#include <cstdint>
+#include <cstdio>
 
 namespace {
 
@@ -239,6 +242,7 @@ void writeNode(std::ostream& o, const TreeNode* n) {
     case NodeType::Export: {
         const auto& p = static_cast<const ExportNode*>(n)->params;
         o << "exportMode " << p.exportMode << '\n';
+        o << "format " << p.format << '\n';
         o << "specimenCount " << p.specimenCount << '\n';
         o << "singleFile " << (p.singleFile ? 1 : 0) << '\n';
         o << "specimenSpacing " << p.specimenSpacing << '\n';
@@ -452,6 +456,7 @@ void applyParams(TreeNode* n, const KV& kv) {
         // 优先读新键 exportMode; 兼容旧工程: 无 exportMode 时用旧 exportWhole(1=整株→模式1)
         int legacyWhole = getI(kv, "exportWhole", 0);
         p.exportMode = getI(kv, "exportMode", legacyWhole != 0 ? 1 : 0);
+        p.format = getI(kv, "format", p.format);
         p.specimenCount = getI(kv, "specimenCount", p.specimenCount);
         p.singleFile = getI(kv, "singleFile", p.singleFile ? 1 : 0) != 0;
         p.specimenSpacing = getF(kv, "specimenSpacing", p.specimenSpacing);
@@ -780,13 +785,92 @@ void loadDefaultTemplate(NodeGraph& graph) {
     parseStream(graph, ss);
 }
 
-// 导出 OBJ：遍历所有批次, 逐批写成一个 group。
+// ---- 单节点参数 kv 接口 ----
+std::map<std::string, std::string> nodeParamsToMap(const TreeNode* n) {
+    std::map<std::string, std::string> out;
+    if (!n) return out;
+    // 复用 writeNode 输出, 剥掉 NODE 头行与 ENDNODE, 按 "key value..." 拆分
+    std::ostringstream os;
+    writeNode(os, n);
+    std::istringstream is(os.str());
+    std::string line;
+    bool first = true;
+    while (std::getline(is, line)) {
+        if (first) { first = false; continue; }   // 跳过 "NODE id type x y"
+        if (line == "ENDNODE") break;
+        std::istringstream ls(line);
+        std::string key; ls >> key;
+        std::string val; std::getline(ls, val);
+        if (!val.empty() && val[0] == ' ') val.erase(0, 1);
+        out[key] = val;
+    }
+    return out;
+}
+
+void applyNodeParams(TreeNode* n, const std::map<std::string, std::string>& kv) {
+    if (!n) return;
+    KV m(kv.begin(), kv.end());   // applyParams 用 unordered_map
+    applyParams(n, m);
+}
+
+// ---- 导出辅助 ----
+namespace {
+
+// 取路径的文件名(去目录)。用于 mtllib / 贴图相对引用。
+std::string baseName(const std::string& path) {
+    size_t slash = path.find_last_of("/\\");
+    return (slash == std::string::npos) ? path : path.substr(slash + 1);
+}
+// 去掉扩展名(保留目录)。
+std::string stripExt(const std::string& path) {
+    size_t dot = path.find_last_of('.');
+    size_t slash = path.find_last_of("/\\");
+    if (dot != std::string::npos && (slash == std::string::npos || dot > slash))
+        return path.substr(0, dot);
+    return path;
+}
+// 收集批次里出现的贴图, 拷贝到 OBJ/FBX 所在目录旁, 返回"输出目录内的相对文件名"。
+// 已拷过的用缓存避免重复。拷贝失败(源不存在)则原样返回源路径, 让 DCC 自行定位。
+struct TexCopier {
+    std::filesystem::path outDir;
+    std::unordered_map<std::string, std::string> cache;
+    std::string operator()(const std::string& src) {
+        if (src.empty()) return {};
+        auto it = cache.find(src);
+        if (it != cache.end()) return it->second;
+        std::string result = src;
+        std::error_code ec;
+        std::filesystem::path s(src);
+        if (std::filesystem::exists(s, ec)) {
+            std::filesystem::path dst = outDir / s.filename();
+            std::filesystem::copy_file(
+                s, dst, std::filesystem::copy_options::overwrite_existing, ec);
+            if (!ec) result = s.filename().string();
+        }
+        cache[src] = result;
+        return result;
+    }
+};
+
+} // namespace
+
 // branch 顶点 stride=10 (pos3,nrm3,uv2,wind2); leaf 顶点 stride=16 (pos3,nrm3,uv2,albedo3,wind2,anchor3)。
 // 只取 pos/nrm/uv 三段写出, 其余(风力/albedo/anchor)丢弃。OBJ 索引 1-based 且全局累加。
+// 同时写出同名 .mtl: 每个批次一份材质(albedo/roughness/贴图), 贴图拷到 obj 旁并相对引用。
 bool exportOBJ(const TreeMeshData& mesh, const std::string& path) {
     std::ofstream f(path);
     if (!f) return false;
+
+    std::string mtlPath = stripExt(path) + ".mtl";
+    std::string mtlName = baseName(mtlPath);
+    std::ofstream mf(mtlPath);
+    bool haveMtl = (bool)mf;
+
+    std::error_code ec;
+    TexCopier copyTex{ std::filesystem::path(path).parent_path() };
+
     f << "# Exported by VegetationTool\n";
+    if (haveMtl) f << "mtllib " << mtlName << '\n';
 
     size_t vBase = 0;  // 已写出的顶点数(OBJ 索引全局累加)
     int batchIdx = 0;
@@ -794,8 +878,30 @@ bool exportOBJ(const TreeMeshData& mesh, const std::string& path) {
         if (batch.vertices.empty() || batch.indices.empty()) continue;
         int stride = batch.isLeaf ? 16 : 10;
         size_t vCount = batch.vertices.size() / stride;
+        const MaterialParams& m = batch.material;
+
+        std::string matName = (batch.isLeaf ? "leaf_mat_" : "branch_mat_")
+                            + std::to_string(batchIdx);
+        if (haveMtl) {
+            mf << "newmtl " << matName << '\n';
+            mf << "Kd " << m.albedo.x << ' ' << m.albedo.y << ' ' << m.albedo.z << '\n';
+            mf << "Ka 0 0 0\n";
+            mf << "Ks " << m.metallic << ' ' << m.metallic << ' ' << m.metallic << '\n';
+            // OBJ 光泽度 Ns: 由粗糙度粗略反推(粗糙越低 -> 高光越锐)
+            mf << "Ns " << (2.0f + (1.0f - m.roughness) * (1.0f - m.roughness) * 900.0f) << '\n';
+            std::string bc = copyTex(m.baseColorTex);
+            if (!bc.empty()) mf << "map_Kd " << bc << '\n';
+            std::string nm = copyTex(m.normalTex);
+            if (!nm.empty()) mf << "map_Bump " << nm << '\n';
+            std::string op = copyTex(m.opacityTex);
+            if (!op.empty()) mf << "map_d " << op << '\n';
+            std::string rg = copyTex(m.roughnessTex);
+            if (!rg.empty()) mf << "map_Ns " << rg << '\n';
+            mf << '\n';
+        }
 
         f << "g " << (batch.isLeaf ? "leaf_" : "branch_") << batchIdx << '\n';
+        if (haveMtl) f << "usemtl " << matName << '\n';
         for (size_t i = 0; i < vCount; ++i) {
             const float* v = &batch.vertices[i * stride];
             f << "v "  << v[0] << ' ' << v[1] << ' ' << v[2] << '\n';
@@ -820,7 +926,189 @@ bool exportOBJ(const TreeMeshData& mesh, const std::string& path) {
         vBase += vCount;
         ++batchIdx;
     }
+    (void)ec;
+    return true;
+}
+
+// ---- FBX (ASCII 7.4) 导出 ----
+// 生成一个 Blender / UE / Maya 均可导入的 ASCII FBX: 每个批次 = 一份 Geometry + Model + Material。
+// 法线/UV 按 ByPolygonVertex + Direct 逐多边形顶点展开(最稳妥, 各 DCC 通吃)。
+// 贴图作为 Texture 对象连到材质的 DiffuseColor/NormalMap/TransparentColor 属性上。
+bool exportFBX(const TreeMeshData& mesh, const std::string& path) {
+    std::ofstream f(path);
+    if (!f) return false;
+    f.setf(std::ios::fixed);
+    f.precision(6);
+
+    TexCopier copyTex{ std::filesystem::path(path).parent_path() };
+
+    // 先过滤出有效批次
+    std::vector<const MeshBatch*> batches;
+    for (const auto& b : mesh.batches)
+        if (!b.vertices.empty() && !b.indices.empty()) batches.push_back(&b);
+
+    // 统一分配 int64 唯一 id
+    int64_t nextId = 1000000;
+    auto newId = [&]() { return nextId++; };
+
+    struct Obj { int64_t geo, model, mat; std::vector<std::pair<int64_t,std::string>> texs; };
+    std::vector<Obj> objs;
+
+    // 头
+    f << "; FBX 7.4.0 project file\n; Exported by VegetationTool\n\n";
+    f << "FBXHeaderExtension:  {\n"
+         "\tFBXHeaderVersion: 1003\n\tFBXVersion: 7400\n"
+         "\tCreator: \"VegetationTool\"\n}\n";
+    f << "GlobalSettings:  {\n\tVersion: 1000\n\tProperties70:  {\n"
+         "\t\tP: \"UpAxis\", \"int\", \"Integer\", \"\",1\n"
+         "\t\tP: \"UpAxisSign\", \"int\", \"Integer\", \"\",1\n"
+         "\t\tP: \"FrontAxis\", \"int\", \"Integer\", \"\",2\n"
+         "\t\tP: \"FrontAxisSign\", \"int\", \"Integer\", \"\",1\n"
+         "\t\tP: \"CoordAxis\", \"int\", \"Integer\", \"\",0\n"
+         "\t\tP: \"CoordAxisSign\", \"int\", \"Integer\", \"\",1\n"
+         "\t\tP: \"UnitScaleFactor\", \"double\", \"Number\", \"\",100\n"
+         "\t}\n}\n";
+
+    // Definitions
+    int nTex = 0;
+    for (const auto* b : batches) {
+        const MaterialParams& m = b->material;
+        for (const std::string* t : {&m.baseColorTex, &m.normalTex, &m.opacityTex, &m.roughnessTex})
+            if (!t->empty()) ++nTex;
+    }
+    int total = 1 + (int)batches.size()*3 + nTex;
+    f << "Definitions:  {\n\tVersion: 100\n\tCount: " << total << "\n";
+    f << "\tObjectType: \"GlobalSettings\" {\n\t\tCount: 1\n\t}\n";
+    f << "\tObjectType: \"Geometry\" {\n\t\tCount: " << batches.size() << "\n\t}\n";
+    f << "\tObjectType: \"Model\" {\n\t\tCount: " << batches.size() << "\n\t}\n";
+    f << "\tObjectType: \"Material\" {\n\t\tCount: " << batches.size() << "\n\t}\n";
+    if (nTex) f << "\tObjectType: \"Texture\" {\n\t\tCount: " << nTex << "\n\t}\n";
+    f << "}\n";
+
+    // Objects
+    f << "Objects:  {\n";
+    int idx = 0;
+    for (const auto* bp : batches) {
+        const MeshBatch& b = *bp;
+        Obj o; o.geo = newId(); o.model = newId(); o.mat = newId();
+        int stride = b.isLeaf ? 16 : 10;
+        size_t vCount = b.vertices.size() / stride;
+        std::string tag = (b.isLeaf ? "leaf_" : "branch_") + std::to_string(idx);
+
+        // Geometry
+        f << "\tGeometry: " << o.geo << ", \"Geometry::" << tag << "\", \"Mesh\" {\n";
+        // Vertices(控制点)
+        f << "\t\tVertices: *" << vCount*3 << " {\n\t\t\ta: ";
+        for (size_t i = 0; i < vCount; ++i) {
+            const float* v = &b.vertices[i*stride];
+            if (i) f << ',';
+            f << v[0] << ',' << v[1] << ',' << v[2];
+        }
+        f << "\n\t\t}\n";
+        // PolygonVertexIndex(每三角形末索引取反标记多边形结束)
+        size_t triCount = b.indices.size()/3;
+        f << "\t\tPolygonVertexIndex: *" << triCount*3 << " {\n\t\t\ta: ";
+        for (size_t i = 0; i+2 < b.indices.size(); i += 3) {
+            if (i) f << ',';
+            f << b.indices[i] << ',' << b.indices[i+1] << ',' << (-(int)b.indices[i+2]-1);
+        }
+        f << "\n\t\t}\n";
+        // 法线: ByPolygonVertex / Direct
+        f << "\t\tLayerElementNormal: 0 {\n\t\t\tVersion: 101\n\t\t\tName: \"\"\n"
+             "\t\t\tMappingInformationType: \"ByPolygonVertex\"\n"
+             "\t\t\tReferenceInformationType: \"Direct\"\n";
+        f << "\t\t\tNormals: *" << triCount*3*3 << " {\n\t\t\t\ta: ";
+        for (size_t i = 0; i+2 < b.indices.size(); i += 3) {
+            for (int k = 0; k < 3; ++k) {
+                const float* v = &b.vertices[b.indices[i+k]*stride];
+                if (i||k) f << ',';
+                f << v[3] << ',' << v[4] << ',' << v[5];
+            }
+        }
+        f << "\n\t\t\t}\n\t\t}\n";
+        // UV: ByPolygonVertex / Direct
+        f << "\t\tLayerElementUV: 0 {\n\t\t\tVersion: 101\n\t\t\tName: \"UVMap\"\n"
+             "\t\t\tMappingInformationType: \"ByPolygonVertex\"\n"
+             "\t\t\tReferenceInformationType: \"Direct\"\n";
+        f << "\t\t\tUV: *" << triCount*3*2 << " {\n\t\t\t\ta: ";
+        for (size_t i = 0; i+2 < b.indices.size(); i += 3) {
+            for (int k = 0; k < 3; ++k) {
+                const float* v = &b.vertices[b.indices[i+k]*stride];
+                if (i||k) f << ',';
+                f << v[6] << ',' << v[7];
+            }
+        }
+        f << "\n\t\t\t}\n\t\t}\n";
+        // 材质: AllSame -> 索引 0
+        f << "\t\tLayerElementMaterial: 0 {\n\t\t\tVersion: 101\n\t\t\tName: \"\"\n"
+             "\t\t\tMappingInformationType: \"AllSame\"\n"
+             "\t\t\tReferenceInformationType: \"IndexToDirect\"\n"
+             "\t\t\tMaterials: *1 {\n\t\t\t\ta: 0\n\t\t\t}\n\t\t}\n";
+        f << "\t\tLayer: 0 {\n\t\t\tVersion: 100\n"
+             "\t\t\tLayerElement:  {\n\t\t\t\tType: \"LayerElementNormal\"\n\t\t\t\tTypedIndex: 0\n\t\t\t}\n"
+             "\t\t\tLayerElement:  {\n\t\t\t\tType: \"LayerElementUV\"\n\t\t\t\tTypedIndex: 0\n\t\t\t}\n"
+             "\t\t\tLayerElement:  {\n\t\t\t\tType: \"LayerElementMaterial\"\n\t\t\t\tTypedIndex: 0\n\t\t\t}\n"
+             "\t\t}\n";
+        f << "\t}\n";
+
+        // Model
+        f << "\tModel: " << o.model << ", \"Model::" << tag << "\", \"Mesh\" {\n"
+             "\t\tVersion: 232\n\t\tProperties70:  {\n"
+             "\t\t\tP: \"InheritType\", \"enum\", \"\", \"\",1\n"
+             "\t\t\tP: \"DefaultAttributeIndex\", \"int\", \"Integer\", \"\",0\n"
+             "\t\t}\n\t\tShading: T\n\t\tCulling: \"CullingOff\"\n\t}\n";
+
+        // Material
+        const MaterialParams& m = b.material;
+        f << "\tMaterial: " << o.mat << ", \"Material::" << tag << "\", \"\" {\n"
+             "\t\tVersion: 102\n\t\tShadingModel: \"phong\"\n\t\tMultiLayer: 0\n"
+             "\t\tProperties70:  {\n";
+        f << "\t\t\tP: \"DiffuseColor\", \"Color\", \"\", \"A\","
+          << m.albedo.x << ',' << m.albedo.y << ',' << m.albedo.z << "\n";
+        f << "\t\t\tP: \"SpecularFactor\", \"Number\", \"\", \"A\"," << m.metallic << "\n";
+        f << "\t\t\tP: \"ShininessExponent\", \"Number\", \"\", \"A\","
+          << (2.0f + (1.0f - m.roughness)*(1.0f - m.roughness)*900.0f) << "\n";
+        f << "\t\t}\n\t}\n";
+
+        // Textures
+        struct TexSlot { const std::string* src; const char* prop; const char* label; };
+        TexSlot slots[] = {
+            {&m.baseColorTex, "DiffuseColor",     "diffuse"},
+            {&m.normalTex,    "NormalMap",        "normal"},
+            {&m.opacityTex,   "TransparentColor", "opacity"},
+            {&m.roughnessTex, "ShininessExponent","rough"},
+        };
+        for (const auto& s : slots) {
+            if (s.src->empty()) continue;
+            std::string rel = copyTex(*s.src);
+            int64_t tid = newId();
+            std::string tname = tag + "_" + s.label;
+            f << "\tTexture: " << tid << ", \"Texture::" << tname << "\", \"\" {\n"
+                 "\t\tType: \"TextureVideoClip\"\n\t\tVersion: 202\n"
+                 "\t\tTextureName: \"Texture::" << tname << "\"\n"
+                 "\t\tProperties70:  {\n\t\t\tP: \"UVSet\", \"KString\", \"\", \"\", \"UVMap\"\n\t\t}\n"
+                 "\t\tFileName: \"" << *s.src << "\"\n"
+                 "\t\tRelativeFilename: \"" << rel << "\"\n\t}\n";
+            o.texs.push_back({tid, s.prop});
+        }
+
+        objs.push_back(std::move(o));
+        ++idx;
+    }
+    f << "}\n";
+
+    // Connections
+    f << "Connections:  {\n";
+    for (const auto& o : objs) {
+        f << "\tC: \"OO\"," << o.model << ",0\n";           // Model -> RootNode
+        f << "\tC: \"OO\"," << o.geo   << ',' << o.model << "\n"; // Geometry -> Model
+        f << "\tC: \"OO\"," << o.mat   << ',' << o.model << "\n"; // Material -> Model
+        for (const auto& [tid, prop] : o.texs)
+            f << "\tC: \"OP\"," << tid << ',' << o.mat << ", \"" << prop << "\"\n"; // Texture -> Material prop
+    }
+    f << "}\n";
     return true;
 }
 
 } // namespace ProjectIO
+

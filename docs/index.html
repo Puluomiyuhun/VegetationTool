@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SlowTree · 节点式植被生成工具</title>
+<style>
+  :root{
+    --green:#4caf50; --green-d:#2e7d32; --green-l:#e8f5e9;
+    --blue:#4285f4; --blue-l:#e8f0fe;
+    --purple:#9c6ade; --purple-l:#f3edfb;
+    --orange:#f5a623; --orange-l:#fff4e5;
+    --ink:#1f2329; --muted:#646a73; --line:#e5e6eb; --bg:#fafbfc;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    color:var(--ink);background:var(--bg);line-height:1.7;-webkit-font-smoothing:antialiased;
+  }
+  a{color:inherit;text-decoration:none}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 24px}
+
+  /* 顶栏 */
+  header{
+    position:sticky;top:0;z-index:50;background:rgba(255,255,255,.85);
+    backdrop-filter:blur(12px);border-bottom:1px solid var(--line);
+  }
+  .nav{display:flex;align-items:center;justify-content:space-between;height:60px}
+  .logo{display:flex;align-items:center;gap:10px;font-weight:700;font-size:20px}
+  .logo .leaf{font-size:24px}
+  .nav-links{display:flex;gap:28px;font-size:15px;color:var(--muted)}
+  .nav-links a:hover{color:var(--green-d)}
+  @media(max-width:720px){.nav-links{display:none}}
+
+  /* Hero */
+  .hero{
+    text-align:center;padding:90px 0 70px;
+    background:radial-gradient(ellipse at top,#eef7ef 0%,var(--bg) 60%);
+  }
+  .badge{
+    display:inline-block;padding:6px 16px;border-radius:100px;font-size:13px;
+    background:var(--green-l);color:var(--green-d);font-weight:600;margin-bottom:22px;
+  }
+  .hero h1{font-size:52px;line-height:1.2;letter-spacing:-1px;margin-bottom:20px}
+  .hero h1 .grad{
+    background:linear-gradient(120deg,#43a047,#66bb6a,#2e7d32);
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+  }
+  .hero p.lead{font-size:20px;color:var(--muted);max-width:640px;margin:0 auto 34px}
+  .btns{display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
+  .btn{
+    display:inline-block;padding:13px 30px;border-radius:10px;font-size:16px;font-weight:600;
+    transition:transform .15s,box-shadow .15s;cursor:pointer;border:none;
+  }
+  .btn:hover{transform:translateY(-2px)}
+  .btn-p{background:var(--green-d);color:#fff;box-shadow:0 6px 18px rgba(46,125,50,.28)}
+  .btn-s{background:#fff;color:var(--ink);border:1px solid var(--line)}
+  .tagline{margin-top:16px;font-size:14px;color:#9aa0a6}
+
+  /* 通用 section */
+  section.blk{padding:72px 0}
+  section.blk:nth-child(even){background:#fff}
+  .sec-head{text-align:center;margin-bottom:48px}
+  .sec-head .kicker{color:var(--green);font-weight:700;font-size:14px;letter-spacing:1px;text-transform:uppercase}
+  .sec-head h2{font-size:36px;margin-top:8px;letter-spacing:-.5px}
+  .sec-head p{color:var(--muted);font-size:17px;max-width:640px;margin:14px auto 0}
+
+  /* 图片占位 */
+  .shot{
+    border:2px dashed #c9d0d8;border-radius:14px;background:
+      repeating-linear-gradient(45deg,#f4f6f8,#f4f6f8 12px,#eef1f4 12px,#eef1f4 24px);
+    display:flex;align-items:center;justify-content:center;text-align:center;
+    color:#9aa0a6;font-size:14px;padding:40px 20px;min-height:220px;
+  }
+  .shot .ph-inner{max-width:80%}
+  .shot .ico{font-size:34px;display:block;margin-bottom:10px;opacity:.6}
+  /* 真实截图 */
+  .pic{
+    border-radius:14px;overflow:hidden;border:1px solid var(--line);
+    box-shadow:0 12px 34px rgba(0,0,0,.10);background:#fff;line-height:0;
+  }
+  .pic img{width:100%;height:auto;display:block}
+  .pic.frame{padding:0}
+  figure.pic figcaption{
+    line-height:1.6;font-size:13px;color:#9aa0a6;text-align:center;
+    padding:10px 12px;background:#fafbfc;border-top:1px solid var(--line);
+  }
+
+  /* 节点流程 */
+  .flow{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:8px;margin:36px 0 8px}
+  .chip{
+    padding:10px 18px;border-radius:10px;font-weight:600;font-size:15px;
+    background:#fff;border:1px solid var(--line);box-shadow:0 2px 6px rgba(0,0,0,.04);
+  }
+  .chip.t{background:#5d4037;color:#fff;border:none}
+  .chip.b{background:#795548;color:#fff;border:none}
+  .chip.w{background:#8d6e63;color:#fff;border:none}
+  .chip.l{background:var(--green);color:#fff;border:none}
+  .arrow{color:#c0c4cc;font-size:20px}
+
+  /* 用法卡片 */
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:22px}
+  @media(max-width:860px){.grid{grid-template-columns:1fr 1fr}}
+  @media(max-width:560px){.grid{grid-template-columns:1fr}}
+  .card{
+    background:#fff;border:1px solid var(--line);border-radius:16px;padding:26px;
+    transition:transform .15s,box-shadow .15s;
+  }
+  .card:hover{transform:translateY(-4px);box-shadow:0 12px 30px rgba(0,0,0,.07)}
+  .card .emoji{font-size:32px;margin-bottom:12px}
+  .card h3{font-size:19px;margin-bottom:8px}
+  .card p{color:var(--muted);font-size:15px}
+
+  /* 三大优势 */
+  .adv{display:flex;gap:36px;align-items:center;margin-bottom:64px}
+  .adv:last-child{margin-bottom:0}
+  .adv:nth-child(even){flex-direction:row-reverse}
+  .adv .txt{flex:1}
+  .adv .visual{flex:1}
+  @media(max-width:820px){.adv,.adv:nth-child(even){flex-direction:column}}
+  .adv .num{
+    display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;
+    border-radius:12px;font-size:22px;font-weight:800;color:#fff;margin-bottom:16px;
+  }
+  .adv h3{font-size:26px;margin-bottom:14px;letter-spacing:-.3px}
+  .adv p{color:#4a4f57;font-size:16px;margin-bottom:14px}
+  .adv ul{list-style:none;margin:14px 0}
+  .adv li{padding-left:26px;position:relative;margin-bottom:10px;color:#4a4f57}
+  .adv li:before{content:"✦";position:absolute;left:0;color:var(--green)}
+  .pill{
+    display:inline-block;padding:5px 14px;border-radius:8px;font-size:13px;font-weight:600;margin-bottom:14px;
+  }
+  .callout{
+    border-radius:12px;padding:16px 18px;font-size:15px;margin-top:8px;line-height:1.65;
+    border-left:4px solid;
+  }
+  .c-green{background:var(--green-l);border-color:var(--green)}
+  .c-blue{background:var(--blue-l);border-color:var(--blue)}
+  .c-purple{background:var(--purple-l);border-color:var(--purple)}
+
+  /* 上手步骤 */
+  .steps{counter-reset:s;max-width:760px;margin:0 auto}
+  .step{display:flex;gap:20px;padding:20px 0;border-bottom:1px solid var(--line)}
+  .step:last-child{border-bottom:none}
+  .step .n{
+    counter-increment:s;flex-shrink:0;width:38px;height:38px;border-radius:50%;
+    background:var(--green-d);color:#fff;display:flex;align-items:center;justify-content:center;
+    font-weight:700;
+  }
+  .step .n:before{content:counter(s)}
+  .step h4{font-size:17px;margin-bottom:4px}
+  .step p{color:var(--muted);font-size:15px}
+  .tip{
+    margin-top:34px;background:var(--orange-l);border-left:4px solid var(--orange);
+    border-radius:12px;padding:18px 20px;font-size:15px;color:#5c4a1f;
+  }
+
+  /* CTA / footer */
+  .cta{
+    text-align:center;padding:80px 0;
+    background:linear-gradient(135deg,#2e7d32,#43a047);color:#fff;
+  }
+  .cta h2{font-size:34px;margin-bottom:14px}
+  .cta p{opacity:.9;font-size:18px;margin-bottom:30px}
+  .cta .btn-p{background:#fff;color:var(--green-d)}
+  footer{padding:34px 0;text-align:center;color:#9aa0a6;font-size:14px;background:var(--bg)}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap nav">
+    <div class="logo"><span class="leaf">🌳</span> SlowTree</div>
+    <nav class="nav-links">
+      <a href="#what">是什么</a>
+      <a href="#use">能做什么</a>
+      <a href="#adv">核心优势</a>
+      <a href="#start">快速上手</a>
+    </nav>
+  </div>
+</header>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="wrap">
+    <span class="badge">🌱 节点式植被生成工具</span>
+    <h1>像搭积木一样，<br><span class="grad">种出一棵树</span></h1>
+    <p class="lead">不用一片叶子一根枝条地去雕。把树干、枝条、叶簇这些节点连起来，一棵会随风摆动、带根系、可直接导出的三维植物就长出来了。</p>
+    <div class="btns">
+      <a class="btn btn-p" href="https://github.com/Puluomiyuhun/VegetationTool" target="_blank" rel="noopener">立即开始</a>
+      <a class="btn btn-s" href="api.html">查看文档</a>
+    </div>
+    <div class="tagline">把专业植被制作的门槛降下来 —— 让美术专注创作，而非繁琐操作</div>
+  </div>
+</section>
+
+<!-- 主界面截图 -->
+<section class="blk" style="padding-top:0;margin-top:-30px">
+  <div class="wrap">
+    <figure class="pic frame">
+      <img src="assets/main-ui.png" alt="SlowTree 主界面：左侧节点图 + 中间三维视口 + 右侧参数面板"/>
+      <figcaption>软件主界面 —— 左侧节点图，中间实时三维视口，右侧参数面板</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- 是什么 -->
+<section class="blk" id="what">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="kicker">核心理念</div>
+      <h2>你不建模型，你描述"树怎么长"</h2>
+      <p>把一个个功能节点连成一张图，软件顺着这张图帮你把树"长"出来。整个过程不需要写任何代码。</p>
+    </div>
+
+    <div class="flow">
+      <span class="chip t">树干 Trunk</span><span class="arrow">→</span>
+      <span class="chip b">枝条 Branch</span><span class="arrow">→</span>
+      <span class="chip w">细枝 Twig</span><span class="arrow">→</span>
+      <span class="chip l">叶簇 Leaf</span>
+    </div>
+    <p style="text-align:center;color:var(--muted);font-size:15px;margin-bottom:32px">
+      连接逻辑就是"谁长在谁身上"。想更繁茂就多接枝条；想换树种就把叶簇换成羽叶。
+    </p>
+
+    <figure class="pic">
+      <img src="assets/nodegraph.png" alt="节点图连接：树干 → 枝条 → 细枝 → 叶簇"/>
+      <figcaption>连线就是"谁长在谁身上"：树干 → 枝条 → 细枝 → 叶簇，上方视口实时长出成品</figcaption>
+    </figure>
+
+    <div class="callout c-green" style="margin-top:28px;text-align:center;border-left:none">
+      💡 <b>所见即所得</b> —— 任何参数一改，中间的三维视口立刻就变。拖动"枝条数量"滑块，能实时看到树冠一点点变密，不用等、不用渲染。
+    </div>
+  </div>
+</section>
+
+<!-- 能做什么 -->
+<section class="blk" id="use">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="kicker">应用场景</div>
+      <h2>你能用它做什么</h2>
+      <p>节点就那么几个，组合起来能覆盖的植物种类相当广。</p>
+    </div>
+
+    <div class="grid">
+      <div class="card"><div class="emoji">🌳</div><h3>各种乔木灌木</h3>
+        <p>调树干弯曲与扭曲，从笔直白桦到虬结老树；改枝条重力，柳树垂枝、松树平展枝都能做。</p></div>
+      <div class="card"><div class="emoji">🎍</div><h3>竹子</h3>
+        <p>内置"竹节"参数，沿枝干周期性鼓起一圈，配上笔直竿子，竹味立刻就出来。</p></div>
+      <div class="card"><div class="emoji">🌿</div><h3>蕨类与棕榈</h3>
+        <p>专门的"叶轴 + 羽叶"节点，画出自然下垂的脊线，铺开一整片带锯齿边缘的连续大叶片。</p></div>
+      <div class="card"><div class="emoji">🍃</div><h3>精细叶片形状</h3>
+        <p>内置轮廓裁剪编辑器，手点或自动识别边缘，让叶片贴合真实剪影，更真实也更高效。</p></div>
+      <div class="card"><div class="emoji">💨</div><h3>自带风吹摆动</h3>
+        <p>天生就会随风轻摆，每片叶子各自抖动、节奏略有不同，不依赖骨骼，导出后也能带走。</p></div>
+      <div class="card"><div class="emoji">📦</div><h3>一键导出 & 批量</h3>
+        <p>整株、单枝叶标本、一次多个随机变体，直接导出通用 OBJ，拿到任何引擎里用。</p></div>
+    </div>
+
+    <div class="grid" style="margin-top:34px">
+      <figure class="pic"><img src="assets/trees.png" alt="乔木"/><figcaption>乔木 · 同一套参数换随机种子，棵棵不同</figcaption></figure>
+      <figure class="pic"><img src="assets/bamboo.png" alt="竹子"/><figcaption>竹子 · 竹节参数 + 笔直竿子</figcaption></figure>
+      <figure class="pic"><img src="assets/fern.png" alt="蕨类羽叶"/><figcaption>蕨类 · 叶轴 + 羽叶节点</figcaption></figure>
+    </div>
+
+    <figure class="pic" style="margin-top:22px">
+      <img src="assets/wind.gif" alt="植被随风摆动动画" loading="lazy"/>
+      <figcaption>💨 天生就会随风摆动 —— 每片叶子各自抖动、节奏略有不同，不依赖骨骼，导出后也带得走</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- 核心优势 -->
+<section class="blk" id="adv">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="kicker">诞生初衷</div>
+      <h2>三件 SpeedTree 做不到的事</h2>
+      <p>SlowTree 不是"更便宜的 SpeedTree"。它之所以诞生，是因为有三件事，恰恰是今天的美术和技术美术最需要的。</p>
+    </div>
+
+    <!-- 优势1 -->
+    <div class="adv">
+      <div class="txt">
+        <div class="num" style="background:var(--green-d)">1</div>
+        <span class="pill" style="background:var(--green-l);color:var(--green-d)">UE 集成</span>
+        <h3>为 UE5.8 的 Nanite 骨骼植被（PVE）量身供料</h3>
+        <p>虚幻引擎 5.8 推出了全新的 <b>PVE（Nanite 骨骼植被编辑器）</b>，能在引擎内做出会动、超高精度的植被。但它有个前提：得从外部喂给它一副"树的骨架"和一批"枝叶模板"。</p>
+        <ul>
+          <li><b>快速导出树骨架</b> —— 节点搭好的主干枝条结构，直接导出成 PVE 需要的骨架</li>
+          <li><b>批量生成枝叶模板</b> —— 一键生成整批枝叶素材标本，正好作为 PVE 输入</li>
+        </ul>
+        <div class="callout c-green">🎯 <b>这正是 SpeedTree 做不到的事。</b>SlowTree 从设计之初就打通了"生成 → 导出 → 喂给引擎"这条链路。做 UE5.8 Nanite 植被，它几乎是为你准备的那块拼图。</div>
+      </div>
+      <div class="visual">
+        <figure class="pic"><img src="assets/ue-pve.png" alt="导出的骨架与批量枝叶模板"/><figcaption>左：导出的树干骨架　右：一批枝叶模板 —— 正好喂给 UE5.8 PVE</figcaption></figure>
+      </div>
+    </div>
+
+    <!-- 优势2 -->
+    <div class="adv">
+      <div class="txt">
+        <div class="num" style="background:var(--blue)">2</div>
+        <span class="pill" style="background:var(--blue-l);color:#1a56c4">自动化 · AI</span>
+        <h3>原生支持 API 和 MCP，能被程序和 AI 直接操控</h3>
+        <p>编辑器内部<b>自带一套控制接口（API）</b>：外部程序可以远程增删节点、连线、调参数、触发导出、甚至抓取截图，全都能自动化完成。</p>
+        <p>在此之上更接入了 <b>MCP</b>——像 Claude 这样的 <b>AI 助手可以直接"动手"操作软件</b>：你用大白话说想要什么样的树，AI 就替你连节点、调参数，做完还能"看"一眼效果继续调整。</p>
+        <div class="callout c-blue">🤖 <b>面向自动化和 AI 时代的能力。</b>接入你自己的生产管线做批量生成，或让 AI 当你的"植被助手"，SlowTree 都为此敞开了大门——这是传统封闭式工具很难提供的。</div>
+      </div>
+      <div class="visual">
+        <figure class="pic"><img src="assets/api-mcp.png" alt="AI 通过对话操控编辑器"/><figcaption>AI 助手通过对话连节点、调参数、截图确认 —— 全程自动完成</figcaption></figure>
+      </div>
+    </div>
+
+    <!-- 优势3 -->
+    <div class="adv">
+      <div class="txt">
+        <div class="num" style="background:var(--purple)">3</div>
+        <span class="pill" style="background:var(--purple-l);color:#6b3fa0">效率</span>
+        <h3>叶片勾边，一键完成</h3>
+        <p>让叶片贴合真实剪影是个又琐碎又耗时的活：要么忍受方形卡片的透明边缘拖累性能，要么手动一点点抠轮廓。</p>
+        <p>SlowTree 把它变成<b>一键操作</b>：内置轮廓编辑器，既能手点勾出叶形，也能<b>自动识别贴图边缘、一键生成贴合剪影的叶片网格</b>。既真实好看，又剔除大量无效透明像素，让模型跑得更轻快。</p>
+        <div class="callout c-purple">✂️ <b>别小看这一下"一键"。</b>它把美术从重复抠图里解放出来，也是很多轻量工具压根没有、而对性能又至关重要的功能。</div>
+      </div>
+      <div class="visual">
+        <figure class="pic"><img src="assets/leafcutout.png" alt="叶片轮廓编辑器"/><figcaption>轮廓编辑器：自动识别贴图边缘，一键生成贴合剪影的叶片网格</figcaption></figure>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 快速上手 -->
+<section class="blk" id="start">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="kicker">五分钟上手</div>
+      <h2>种出你的第一棵树</h2>
+      <p>不用怕，真的很快。跟着走一遍就懂了。</p>
+    </div>
+
+    <div class="steps">
+      <div class="step"><div class="n"></div><div><h4>打开软件</h4><p>视口中央已经站着一棵长好的默认树——这就是你的起点，不用从零开始。</p></div></div>
+      <div class="step"><div class="n"></div><div><h4>点一下"树干"节点</h4><p>拖动"长度""弯曲""螺旋扭曲"滑块，看主干实时变高、变弯、变苍劲。</p></div></div>
+      <div class="step"><div class="n"></div><div><h4>玩玩"枝条"节点</h4><p>调数量让树冠变密，调张开角度和重力让枝条上扬或下垂——树的气质就这么调出来。</p></div></div>
+      <div class="step"><div class="n"></div><div><h4>换换叶子</h4><p>改叶片大小和数量；想要更真实的叶形，打开轮廓编辑器勾一下剪影。</p></div></div>
+      <div class="step"><div class="n"></div><div><h4>加点风</h4><p>看着叶子和枝条自然摇起来，感受一下生命力。</p></div></div>
+      <div class="step"><div class="n"></div><div><h4>导出成品</h4><p>接上"导出"节点，选整株或标本，一键生成 OBJ，拿去项目里用。</p></div></div>
+    </div>
+
+    <div class="tip">💡 <b>小建议：</b>刚开始别追求一步到位。先大刀阔斧调树干枝条定好骨架，再回头精修叶子材质。多用"随机种子"，同一套参数能变出无数棵形态各异的树，总有一棵是你要的。</div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section class="cta">
+  <div class="wrap">
+    <h2>种一棵树，从连接第一个节点开始</h2>
+    <p>轻松、直观、有创作的乐趣 —— 让做植被回归本来的样子</p>
+    <a class="btn btn-p" href="https://github.com/Puluomiyuhun/VegetationTool" target="_blank" rel="noopener">立即体验 SlowTree</a>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    SlowTree · 节点式植被生成工具　|　本工具仍在持续开发中，功能会随大家的反馈不断长大
+  </div>
+</footer>
+
+</body>
+</html>

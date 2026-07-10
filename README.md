@@ -49,7 +49,12 @@ An open-source, node-based vegetation generation tool inspired by SpeedTree — 
 - Reinhard tonemapping + gamma 2.2
 
 ### Mesh Export
-- **Export** node: connect a Trunk to write its whole tree out as a Wavefront **OBJ** (positions, normals, UVs)
+- **Export** node with two output formats, selectable in the Properties panel:
+  - **OBJ** — Wavefront OBJ (positions, normals, UVs) **plus a matching `.mtl`**: one material per batch carrying albedo (`Kd`), specular/shininess derived from metallic & roughness, and `map_Kd` / `map_Bump` / `map_d` / `map_Ns` texture references
+  - **FBX** — ASCII FBX 7.4 with full geometry, per-batch **materials**, and **texture** objects wired to `DiffuseColor` / `NormalMap` / `TransparentColor` — imports cleanly into Blender, Unreal Engine, and Maya
+- **Textures are copied next to the exported file** and referenced relatively, so the mesh + maps stay self-contained and portable
+- Three export modes: whole tree (trace to root Trunk), current-node subtree as an upright **specimen** (for UE5 PCG scattering), or the ancestor chain in original pose
+- Specimen mode can batch multiple seeded variants into one file (spaced along X) or one file per variant
 
 ### Viewport
 - Orbit camera (left-drag = rotate, middle-drag = pan, scroll = zoom)
@@ -172,7 +177,7 @@ Click the **×** button to clear a texture and revert to the uniform color value
 
 ## 🗺 Roadmap
 
-- [x] Mesh export (OBJ) — *FBX / glTF planned*
+- [x] Mesh export (OBJ **+ .mtl materials**, **FBX** with materials & textures) — *glTF planned*
 - [ ] LOD generation
 - [ ] Skeletal animation support
 - [ ] Collision mesh generation

@@ -1,12 +1,16 @@
 #include "Application.h"
 #include "graph/Nodes.h"
 #include "io/ProjectIO.h"
+#include <nlohmann/json.hpp>
+#include <stb_image_write.h>
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include <stdexcept>
 #include <cstdio>
 #include <vector>
 #include <cmath>
+#include <string>
+#include <cstring>
 
 // 程序化生成一个风格化的树形图标（绿色圆冠 + 棕色树干），设置为窗口图标。
 // 无需外部资源文件，避免打包依赖。
@@ -96,6 +100,11 @@ bool Application::init(int width, int height) {
     m_renderer.uploadTreeMesh(m_meshData);
     m_graph.clearDirty();
 
+    // 启动内嵌 HTTP 控制服务(供外部 AI/MCP 调用), 仅监听本地回环。
+    m_api.start(8765, [this](const std::string& method, const ApiServer::Json& params) {
+        return handleApiCommand(method, params);
+    });
+
     return true;
 }
 
@@ -119,6 +128,9 @@ void Application::run() {
 }
 
 void Application::update() {
+    // 执行外部 API 累积的命令(在主线程, NodeGraph/OpenGL 非线程安全)。
+    m_api.drain();
+
     // 选中节点变化时也需重新生成(高亮几何随选中节点走)
     if (m_graph.isDirty() || m_selectedNode != m_lastHlNode) {
         m_meshData = m_generator.generate(m_graph, m_selectedNode);
@@ -133,6 +145,20 @@ void Application::update() {
         auto* ex = static_cast<ExportNode*>(node.get());
         if (!ex->params.requestExport) continue;
         ex->params.requestExport = false;
+
+        // 按 format 选择导出器, 并把路径扩展名规整为 .obj / .fbx。
+        const bool isFbx = (ex->params.format == 1);
+        auto fixExt = [isFbx](std::string p) {
+            size_t dot = p.find_last_of('.');
+            size_t slash = p.find_last_of("/\\");
+            std::string want = isFbx ? ".fbx" : ".obj";
+            if (dot != std::string::npos && (slash == std::string::npos || dot > slash))
+                p = p.substr(0, dot);
+            return p + want;
+        };
+        auto exportMesh = [isFbx](const TreeMeshData& mesh, const std::string& p) {
+            return isFbx ? ProjectIO::exportFBX(mesh, p) : ProjectIO::exportOBJ(mesh, p);
+        };
 
         // 上游节点 = 其输出连到本 Export 输入的节点(遍历各节点的 children 反查)
         NodeId upstreamId = INVALID_NODE;
@@ -166,9 +192,10 @@ void Application::update() {
                 continue;
             }
             TreeMeshData mesh = m_generator.generateSubtree(m_graph, rootTrunk);
-            bool ok = ProjectIO::exportOBJ(mesh, ex->params.path);
+            std::string outPath = fixExt(ex->params.path);
+            bool ok = exportMesh(mesh, outPath);
             std::fprintf(ok ? stdout : stderr, "[Export] %s -> %s\n",
-                         ok ? "OK" : "FAILED", ex->params.path.c_str());
+                         ok ? "OK" : "FAILED", outPath.c_str());
             continue;
         }
 
@@ -179,9 +206,9 @@ void Application::update() {
                 std::fprintf(stderr, "[Export] 祖先链追溯不到根 Trunk, 跳过导出\n");
                 continue;
             }
-            bool ok = ProjectIO::exportOBJ(mesh, ex->params.path);
+            bool ok = exportMesh(mesh, fixExt(ex->params.path));
             std::fprintf(ok ? stdout : stderr, "[Export] %s -> %s\n",
-                         ok ? "OK" : "FAILED", ex->params.path.c_str());
+                         ok ? "OK" : "FAILED", fixExt(ex->params.path).c_str());
             continue;
         }
 
@@ -201,12 +228,13 @@ void Application::update() {
                     merged.batches.push_back(std::move(b));
                 }
             }
-            bool ok = ProjectIO::exportOBJ(merged, ex->params.path);
+            std::string outPath = fixExt(ex->params.path);
+            bool ok = exportMesh(merged, outPath);
             std::fprintf(ok ? stdout : stderr, "[Export] %s (x%d) -> %s\n",
-                         ok ? "OK" : "FAILED", count, ex->params.path.c_str());
+                         ok ? "OK" : "FAILED", count, outPath.c_str());
         } else {
             // 在扩展名前插入 _N: fern.obj -> fern_0.obj / fern_1.obj ...
-            std::string base = ex->params.path, ext;
+            std::string base = fixExt(ex->params.path), ext;
             size_t dot = base.find_last_of('.');
             size_t slash = base.find_last_of("/\\");
             if (dot != std::string::npos && (slash == std::string::npos || dot > slash)) {
@@ -216,7 +244,7 @@ void Application::update() {
             for (int i = 0; i < count; ++i) {
                 TreeMeshData v = m_generator.generateSpecimen(m_graph, upstreamId, i);
                 std::string fn = base + "_" + std::to_string(i) + ext;
-                bool ok = ProjectIO::exportOBJ(v, fn);
+                bool ok = exportMesh(v, fn);
                 std::fprintf(ok ? stdout : stderr, "[Export] %s -> %s\n",
                              ok ? "OK" : "FAILED", fn.c_str());
             }
@@ -242,6 +270,7 @@ void Application::render() {
 }
 
 void Application::shutdown() {
+    m_api.stop();
     m_ui.shutdown();
     m_renderer.shutdown();
     m_framebuffer.destroy();
@@ -251,4 +280,286 @@ void Application::shutdown() {
 
 void Application::framebufferResizeCb(GLFWwindow* w, int width, int height) {
     glViewport(0, 0, width, height);
+}
+
+// ---- 外部 API 命令分发(主线程执行) ----
+// 约定: 抛出 std::runtime_error 会被上层包成 { ok:false, error }。
+
+// 节点类型 <-> 名称 双向映射(API 用可读名, 也兼容传入整数序号)。
+static const char* nodeTypeName(NodeType t) {
+    switch (t) {
+        case NodeType::Trunk:       return "Trunk";
+        case NodeType::Roots:       return "Roots";
+        case NodeType::Branch:      return "Branch";
+        case NodeType::Twig:        return "Twig";
+        case NodeType::LeafCluster: return "LeafCluster";
+        case NodeType::Spine:       return "Spine";
+        case NodeType::Frond:       return "Frond";
+        case NodeType::Export:      return "Export";
+    }
+    return "Unknown";
+}
+
+static bool parseNodeType(const ApiServer::Json& v, NodeType& out) {
+    if (v.is_number_integer()) {
+        int i = v.get<int>();
+        if (i < 0 || i > (int)NodeType::Export) return false;
+        out = (NodeType)i;
+        return true;
+    }
+    if (v.is_string()) {
+        std::string s = v.get<std::string>();
+        for (int i = 0; i <= (int)NodeType::Export; ++i)
+            if (s == nodeTypeName((NodeType)i)) { out = (NodeType)i; return true; }
+    }
+    return false;
+}
+
+// base64 编码(截图以 data-uri 形式返回给 MCP/AI)。
+static std::string base64Encode(const unsigned char* data, size_t len) {
+    static const char* tbl =
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::string out;
+    out.reserve((len + 2) / 3 * 4);
+    for (size_t i = 0; i < len; i += 3) {
+        unsigned v = data[i] << 16;
+        if (i + 1 < len) v |= data[i + 1] << 8;
+        if (i + 2 < len) v |= data[i + 2];
+        out.push_back(tbl[(v >> 18) & 0x3F]);
+        out.push_back(tbl[(v >> 12) & 0x3F]);
+        out.push_back(i + 1 < len ? tbl[(v >> 6) & 0x3F] : '=');
+        out.push_back(i + 2 < len ? tbl[v & 0x3F]        : '=');
+    }
+    return out;
+}
+
+// stb_image_write 内存写回调: 把 PNG 字节追加到 vector。
+static void pngToVector(void* ctx, void* data, int size) {
+    auto* v = static_cast<std::vector<unsigned char>*>(ctx);
+    const auto* p = static_cast<unsigned char*>(data);
+    v->insert(v->end(), p, p + size);
+}
+
+ApiServer::Json Application::handleApiCommand(const std::string& method,
+                                             const ApiServer::Json& params) {
+    using Json = ApiServer::Json;
+
+    auto reqId = [&](const char* key) -> NodeId {
+        if (!params.contains(key) || !params[key].is_number_integer())
+            throw std::runtime_error(std::string("missing integer param: ") + key);
+        return (NodeId)params[key].get<int64_t>();
+    };
+    auto nodeInfo = [&](const TreeNode* n) -> Json {
+        return Json{
+            {"id",    n->id},
+            {"type",  (int)n->getType()},
+            {"typeName", nodeTypeName(n->getType())},
+            {"label", n->getLabel()},
+            {"x",     n->editorPos.x},
+            {"y",     n->editorPos.y},
+        };
+    };
+
+    if (method == "ping") {
+        return Json{{"pong", true}, {"app", "SlowTree"}};
+    }
+
+    if (method == "graph.list") {
+        // 返回图中全部节点(id/type/label/编辑器坐标)与连线。
+        Json nodes = Json::array();
+        for (const auto& [id, node] : m_graph.nodes())
+            nodes.push_back(nodeInfo(node.get()));
+        Json links = Json::array();
+        for (const Link& l : m_graph.links()) {
+            // 附带 fromNode/toNode 便于 AI 理解拓扑(pin 反查 owner)。
+            NodeId fromNode = INVALID_NODE, toNode = INVALID_NODE;
+            for (const auto& [id, node] : m_graph.nodes()) {
+                if (node->outputPin.id == l.fromPin) fromNode = id;
+                for (const auto& p : node->inputPins)
+                    if (p.id == l.toPin) toNode = id;
+            }
+            links.push_back({{"id", l.id}, {"fromPin", l.fromPin}, {"toPin", l.toPin},
+                             {"fromNode", fromNode}, {"toNode", toNode}});
+        }
+        return Json{{"nodes", nodes}, {"links", links}, {"selected", m_selectedNode}};
+    }
+
+    if (method == "node.add") {
+        NodeType t;
+        if (!params.contains("type") || !parseNodeType(params["type"], t))
+            throw std::runtime_error("invalid or missing 'type'");
+        float x = params.value("x", 0.0f), y = params.value("y", 0.0f);
+        NodeId id = m_graph.addNode(t, {x, y});
+        return Json{{"id", id}};
+    }
+
+    if (method == "node.remove") {
+        NodeId id = reqId("id");
+        if (!m_graph.getNode(id)) throw std::runtime_error("node not found");
+        m_graph.removeNode(id);
+        if (m_selectedNode == id) m_selectedNode = INVALID_NODE;
+        return Json{{"removed", id}};
+    }
+
+    if (method == "node.addChild") {
+        NodeId parent = reqId("parentId");
+        NodeType t;
+        if (!params.contains("type") || !parseNodeType(params["type"], t))
+            throw std::runtime_error("invalid or missing 'type'");
+        NodeId id = m_graph.addChildNode(parent, t);
+        if (id == INVALID_NODE) throw std::runtime_error("addChild failed (bad parent?)");
+        return Json{{"id", id}};
+    }
+
+    if (method == "link.add") {
+        // 支持两种形式: {fromNode,toNode}(推荐, 用节点 id) 或 {fromPin,toPin}(底层 pin id)。
+        PinId fromPin = INVALID_PIN, toPin = INVALID_PIN;
+        if (params.contains("fromNode") && params.contains("toNode")) {
+            TreeNode* a = m_graph.getNode((NodeId)params["fromNode"].get<int64_t>());
+            TreeNode* b = m_graph.getNode((NodeId)params["toNode"].get<int64_t>());
+            if (!a || !b) throw std::runtime_error("fromNode/toNode not found");
+            if (b->inputPins.empty()) throw std::runtime_error("toNode has no input pin");
+            fromPin = a->outputPin.id;
+            toPin   = b->inputPins[0].id;
+        } else {
+            fromPin = (PinId)reqId("fromPin");
+            toPin   = (PinId)reqId("toPin");
+        }
+        LinkId lid = m_graph.addLink(fromPin, toPin);
+        return Json{{"id", lid}};
+    }
+
+    if (method == "link.remove") {
+        LinkId id = (LinkId)reqId("id");
+        m_graph.removeLink(id);
+        return Json{{"removed", id}};
+    }
+
+    if (method == "node.getParams") {
+        NodeId id = reqId("id");
+        TreeNode* n = m_graph.getNode(id);
+        if (!n) throw std::runtime_error("node not found");
+        auto kv = ProjectIO::nodeParamsToMap(n);
+        Json p = Json::object();
+        for (const auto& [k, v] : kv) p[k] = v;
+        Json out = nodeInfo(n);
+        out["params"] = p;
+        return out;
+    }
+
+    if (method == "node.setParams") {
+        NodeId id = reqId("id");
+        TreeNode* n = m_graph.getNode(id);
+        if (!n) throw std::runtime_error("node not found");
+        if (!params.contains("params") || !params["params"].is_object())
+            throw std::runtime_error("missing object 'params'");
+        std::map<std::string, std::string> kv;
+        for (auto it = params["params"].begin(); it != params["params"].end(); ++it) {
+            // 值统一转成字符串(数字/布尔/字符串都接受), 复用 .vtree 的解析。
+            const Json& v = it.value();
+            kv[it.key()] = v.is_string() ? v.get<std::string>() : v.dump();
+        }
+        ProjectIO::applyNodeParams(n, kv);
+        m_graph.markDirty();   // 触发主循环下一帧重生成网格
+        return Json{{"updated", id}, {"applied", (int)kv.size()}};
+    }
+
+    if (method == "node.select") {
+        NodeId id = reqId("id");
+        if (id != INVALID_NODE && !m_graph.getNode(id))
+            throw std::runtime_error("node not found");
+        m_selectedNode = id;
+        return Json{{"selected", id}};
+    }
+
+    if (method == "project.new") {
+        m_graph.clear();
+        m_selectedNode = INVALID_NODE;
+        return Json{{"ok", true}};
+    }
+
+    if (method == "project.buildDefault") {
+        m_graph.clear();
+        m_graph.buildDefaultTemplate();
+        m_graph.markDirty();
+        m_selectedNode = INVALID_NODE;
+        return Json{{"ok", true}};
+    }
+
+    if (method == "project.save") {
+        std::string path = params.value("path", std::string());
+        if (path.empty()) throw std::runtime_error("missing 'path'");
+        bool ok = ProjectIO::save(m_graph, path, &m_renderer.lighting);
+        if (!ok) throw std::runtime_error("save failed");
+        return Json{{"saved", path}};
+    }
+
+    if (method == "project.load") {
+        std::string path = params.value("path", std::string());
+        if (path.empty()) throw std::runtime_error("missing 'path'");
+        bool ok = ProjectIO::load(m_graph, path, &m_renderer.lighting);
+        if (!ok) throw std::runtime_error("load failed");
+        m_graph.markDirty();
+        m_selectedNode = INVALID_NODE;
+        return Json{{"loaded", path}};
+    }
+
+    if (method == "export.trigger") {
+        // 触发一个 Export 节点导出(下一帧 update() 中执行)。可指定 id, 否则用首个 Export 节点。
+        NodeId id = INVALID_NODE;
+        if (params.contains("id")) id = (NodeId)params["id"].get<int64_t>();
+        ExportNode* ex = nullptr;
+        for (const auto& [nid, node] : m_graph.nodes()) {
+            if (node->getType() != NodeType::Export) continue;
+            if (id == INVALID_NODE || nid == id) {
+                ex = static_cast<ExportNode*>(node.get());
+                id = nid;
+                break;
+            }
+        }
+        if (!ex) throw std::runtime_error("no matching Export node");
+        if (params.contains("path")) ex->params.path = params["path"].get<std::string>();
+        ex->params.requestExport = true;
+        return Json{{"triggered", id}, {"path", ex->params.path}};
+    }
+
+    if (method == "render.screenshot") {
+        // 抓取视口离屏 FBO 的颜色纹理(上一帧渲染结果)。
+        // 在主线程执行, GL 上下文有效。可写文件(path)和/或返回 base64(默认返回)。
+        if (!m_framebuffer.valid())
+            throw std::runtime_error("framebuffer not ready");
+        int w = m_framebuffer.width(), h = m_framebuffer.height();
+        if (w <= 0 || h <= 0) throw std::runtime_error("framebuffer empty");
+
+        std::vector<unsigned char> pixels((size_t)w * h * 4);
+        glBindTexture(GL_TEXTURE_2D, m_framebuffer.colorTexture());
+        glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
+        glBindTexture(GL_TEXTURE_2D, 0);
+
+        // OpenGL 纹理原点在左下, 图像原点在左上 -> 垂直翻转。
+        std::vector<unsigned char> flipped((size_t)w * h * 4);
+        size_t row = (size_t)w * 4;
+        for (int y = 0; y < h; ++y)
+            std::memcpy(&flipped[(size_t)y * row],
+                        &pixels[(size_t)(h - 1 - y) * row], row);
+
+        std::string path = params.value("path", std::string());
+        bool wantB64 = params.value("base64", path.empty());  // 未指定则: 有路径写文件, 否则回 base64
+
+        Json out{{"width", w}, {"height", h}};
+        if (!path.empty()) {
+            if (!stbi_write_png(path.c_str(), w, h, 4, flipped.data(), (int)row))
+                throw std::runtime_error("write png failed");
+            out["path"] = path;
+        }
+        if (wantB64) {
+            std::vector<unsigned char> png;
+            stbi_write_png_to_func(pngToVector, &png, w, h, 4, flipped.data(), (int)row);
+            out["mime"] = "image/png";
+            out["base64"] = base64Encode(png.data(), png.size());
+        }
+        return out;
+    }
+
+    throw std::runtime_error("unknown method: " + method);
 }
