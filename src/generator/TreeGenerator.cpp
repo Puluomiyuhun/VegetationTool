@@ -1,5 +1,6 @@
 #include "TreeGenerator.h"
 #include "CylinderSegment.h"
+#include "LuaEngine.h"
 #include "graph/Nodes.h"
 #include <glm/gtc/constants.hpp>
 #include <cmath>
@@ -360,7 +361,8 @@ TreeMeshData TreeGenerator::generateSpecimen(NodeGraph& graph, NodeId rootId, in
         glm::vec3 up(0, 1, 0);
         NodeType t = node->getType();
         if (t == NodeType::Branch || t == NodeType::Twig ||
-            t == NodeType::Spine  || t == NodeType::Frond) {
+            t == NodeType::Spine  || t == NodeType::Frond ||
+            t == NodeType::Custom) {
             // 合成一根竖直父级 rings, 使 processNode 分派守卫通过。
             // Branch/Twig/Spine 会在各自 build 内检测到标本根后改走竖直单枝逻辑;
             // Frond 无多实例, 直接沿此竖直父级 rings 铺一条叶带即可。
@@ -418,6 +420,7 @@ void TreeGenerator::processNode(
         case NodeType::Spine:       m_windW = 0.5f;  break;
         case NodeType::Frond:       m_windW = 0.7f;  break;
         case NodeType::Export:      m_windW = 0.0f;  break;  // 导出节点无几何
+        case NodeType::Custom:      m_windW = 0.28f; break;  // 同 Branch
     }
     // id 哈希 → [0, 2π) 相位
     m_windPhase = (float)((node->id * 2654435761u) % 62832u) / 10000.0f;
@@ -464,6 +467,11 @@ void TreeGenerator::processNode(
         break;
     case NodeType::Export:
         break;  // 导出节点不生成几何(仅作为 Trunk→导出 的连接标记)
+    case NodeType::Custom:
+        if (parentRings && !parentRings->empty())
+            buildCustom(static_cast<const CustomNode*>(node),
+                        graph, *parentRings, parentLen, depth);
+        break;
     }
 
     m_hlCapture = prevCapture;
@@ -666,6 +674,118 @@ void TreeGenerator::buildBranches(
                 processNode(graph, child, &rings, attachPos, branchDir, thisLen, depth+1);
         }
         if (m_chainMode) break;   // 祖先链模式: 只长一根链上代表实例
+    }
+}
+
+// ---- Custom（脚本自定义枝条） ----
+// 运行节点内 Lua 脚本得到一批枝条 spec，再沿用与 Branch 完全相同的
+// 圆柱/枝领/子节点递归管线生成几何。脚本只产出数值，安全且自动接入
+// 风力/拾取/高亮/导出。脚本报错时不崩溃：写回 lastError，跳过本节点几何。
+void TreeGenerator::buildCustom(
+    const CustomNode* node, const NodeGraph& graph,
+    const std::vector<BranchRing>& parentRings,
+    float parentLen, int depth)
+{
+    const auto& p = node->params;
+
+    // 运行脚本
+    LuaCtx ctx;
+    ctx.count        = p.count;
+    ctx.parentLen    = parentLen;
+    ctx.depth        = depth;
+    ctx.seed         = p.seed + depth * 100 + m_specimenSeedOffset;
+    // 附着半径参考: 取父级中部半径(供脚本按比例算)
+    {
+        glm::vec3 tp, td, tr; float trad = 0.3f;
+        sampleRings(parentRings, 0.5f, tp, td, tr, trad);
+        ctx.parentRadius = trad;
+    }
+
+    std::vector<BranchSpec> specs;
+    std::string err;
+    const std::string& script = p.script.empty() ? std::string(kDefaultCustomScript) : p.script;
+    bool ok = LuaEngine::run(script, ctx, specs, err);
+    node->params.lastError = err;   // 空=成功; 非空=错误/警告(UI 红字显示)
+    if (!ok) return;                // 致命错误: 不产出几何(保留上次成功网格由上层管理)
+
+    std::mt19937 rng(p.seed + depth * 100 + m_specimenSeedOffset);
+
+    // 标本模式: 只长第一根 spec, 从原点沿 +Y 竖直挺立(与 Branch 标本一致)
+    bool specimen = (m_specimenRoot == node->id);
+
+    auto& batch = getBatch(p.material, false);
+
+    for (size_t si = 0; si < specs.size(); ++si) {
+        const BranchSpec& s = specs[si];
+
+        glm::vec3 surfacePos, branchDir;
+        float attachRadius, startR, endR, thisLen;
+        glm::vec3 attachPos, attachDir, attachRight;
+
+        if (specimen) {
+            // 竖直单枝: 忽略附着, 从原点沿 +Y
+            attachPos = {0,0,0}; attachDir = {0,1,0}; attachRight = {1,0,0};
+            attachRadius = m_specParentRadius;
+            surfacePos   = {0,0,0};
+            branchDir    = {0,1,0};
+            startR       = m_specParentRadius * s.radius;
+            endR         = startR * s.endRatio;
+            thisLen      = m_specParentLen * (s.length / std::max(0.001f, parentLen));
+        } else {
+            float t = std::clamp(s.t, 0.0f, 1.0f);
+            attachRadius = 1.0f;
+            sampleRings(parentRings, t, attachPos, attachDir, attachRight, attachRadius);
+
+            // 方案B 测量
+            if (m_measureTarget == node->id && !m_measureDone) {
+                m_specParentLen    = parentLen;
+                m_specParentRadius = attachRadius;
+                m_measureDone      = true;
+            }
+
+            // 由 elevation(仰角) + azimuth(方位角) 求方向
+            branchDir = rotateAroundAxis(attachDir, attachRight, s.elevation);
+            branchDir = rotateAroundAxis(branchDir, attachDir, s.azimuth);
+
+            thisLen = std::max(0.01f, s.length);
+            startR  = attachRadius * s.radius;
+            endR    = startR * s.endRatio;
+
+            // 从父级表面发出
+            glm::vec3 radial = branchDir - attachDir * glm::dot(branchDir, attachDir);
+            surfacePos = (glm::length(radial) > 1e-4f)
+                ? attachPos + glm::normalize(radial) * attachRadius
+                : attachPos;
+        }
+
+        auto rings = CylinderSegment::buildNaturalRings(
+            surfacePos, branchDir, thisLen,
+            startR, endR,
+            p.lengthSegs, p.noiseAmount, p.noiseFreq,
+            p.gnarl, p.taperPow, specimen ? 0.0f : p.gravity, rng);
+
+        size_t hlV = batch.vertices.size(), hlI = batch.indices.size();
+        appendCylinder(batch, rings, p.sides, p.uvTilingU, p.uvTilingV);
+        if (!specimen && !rings.empty())
+            appendCollar(batch, attachPos, attachDir, attachRadius,
+                         rings.front().center, rings.front().up, rings.front().right,
+                         startR, p.baseFlare, p.sides, p.uvTilingU, p.uvTilingV, thisLen);
+        afterAppend(batch, hlV, hlI);
+
+        // 子节点从枝条末端出发
+        glm::vec3 tip    = rings.empty() ? surfacePos + branchDir * thisLen : rings.back().center;
+        glm::vec3 tipDir = rings.empty() ? branchDir : rings.back().up;
+        for (auto* child : graph.childrenOf(node->id)) {
+            if (child->getType() == NodeType::LeafCluster)
+                processNode(graph, child, &rings, tip, tipDir, thisLen, depth+1);
+            else
+                processNode(graph, child, &rings,
+                            specimen ? glm::vec3(0,0,0) : attachPos,
+                            specimen ? glm::vec3(0,1,0) : branchDir, thisLen, depth+1);
+        }
+
+        if (specimen) break;         // 标本: 只长一根
+        if (m_chainMode) break;      // 祖先链模式: 只长一根代表实例
     }
 }
 

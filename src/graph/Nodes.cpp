@@ -433,3 +433,70 @@ bool ExportNode::drawProperties() {
     // 属性变更不需要重建网格, 恒返回 false
     return false;
 }
+
+// ---------- CustomNode ----------
+CustomNode::CustomNode() {
+    type = NodeType::Custom;
+    if (params.script.empty()) params.script = kDefaultCustomScript;
+}
+
+bool CustomNode::drawProperties() {
+    bool changed = false;
+    if (params.script.empty()) params.script = kDefaultCustomScript;
+
+    if (ImGui::CollapsingHeader("Script (Lua)", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::TextWrapped("编写 generate(ctx) 返回枝条数组。ctx: count/parentLen/"
+                           "parentRadius/depth/seed, 工具 rand()/rand(a,b)/noise(x)。");
+        ImGui::TextDisabled("每根枝条: {t, azimuth, elevation, length, radius, endRatio}");
+        ImGui::Spacing();
+
+        // 多行脚本编辑框(std::string 回调式增长)
+        ImVec2 boxSize(-1.0f, 220.0f);
+        if (ImGui::InputTextMultiline("##customscript", &params.script[0],
+                params.script.capacity() + 1, boxSize,
+                ImGuiInputTextFlags_CallbackResize,
+                [](ImGuiInputTextCallbackData* d) -> int {
+                    auto* s = static_cast<std::string*>(d->UserData);
+                    if (d->EventFlag == ImGuiInputTextFlags_CallbackResize) {
+                        s->resize(d->BufTextLen);
+                        d->Buf = &(*s)[0];
+                    }
+                    return 0;
+                }, &params.script)) {
+            changed = true;
+        }
+
+        if (ImGui::Button("Apply / Rebuild", ImVec2(-1, 0)))
+            changed = true;   // 触发上层重建
+
+        // 上次执行的错误(由 TreeGenerator 写回)红色显示
+        if (!params.lastError.empty()) {
+            ImGui::Spacing();
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.95f, 0.35f, 0.30f, 1.0f));
+            ImGui::TextWrapped("脚本错误: %s", params.lastError.c_str());
+            ImGui::PopStyleColor();
+        }
+    }
+
+    // Geometry：单根枝条的截面/锥度/扰动/风格(脚本只给逻辑, 这里控形态)
+    if (ImGui::CollapsingHeader("Geometry", ImGuiTreeNodeFlags_DefaultOpen)) {
+        changed |= ImGui::SliderInt  ("Count",        &params.count,       0, 200);
+        changed |= ImGui::SliderFloat("Base Flare",   &params.baseFlare,   1.0f, 5.0f);
+        changed |= ImGui::SliderFloat("Taper Power",  &params.taperPow,    0.5f, 4.0f);
+        changed |= ImGui::SliderFloat("Gravity",      &params.gravity,     0.0f, 1.0f);
+        changed |= ImGui::SliderFloat("Noise Amount", &params.noiseAmount, 0.0f, 90.0f);
+        changed |= ImGui::SliderFloat("Noise Freq",   &params.noiseFreq,   0.5f, 8.0f);
+        changed |= ImGui::SliderFloat("Gnarl",        &params.gnarl,       0.0f, 90.0f);
+        changed |= ImGui::SliderInt  ("Sides",        &params.sides,       3, 12);
+        changed |= ImGui::SliderInt  ("Length Segs",  &params.lengthSegs,  2, 16);
+        changed |= ImGui::SliderFloat("UV Tiling U",  &params.uvTilingU,   0.1f, 20.0f);
+        changed |= ImGui::SliderFloat("UV Tiling V",  &params.uvTilingV,   0.1f, 20.0f);
+        changed |= ImGui::SliderInt  ("Seed",         &params.seed,        0, 999);
+    }
+    if (ImGui::CollapsingHeader("Material", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::PushID("mat_custom");
+        changed |= drawMaterial(params.material, false);
+        ImGui::PopID();
+    }
+    return changed;
+}

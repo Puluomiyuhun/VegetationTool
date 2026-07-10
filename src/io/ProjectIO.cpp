@@ -12,6 +12,33 @@
 
 namespace {
 
+// Base64 编解码: 自定义节点脚本是多行文本, 编成单行存入行式 .vtree(避免破坏解析)。
+const char* kB64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+std::string b64encode(const std::string& in) {
+    std::string out;
+    int val = 0, bits = -6;
+    for (unsigned char c : in) {
+        val = (val << 8) + c; bits += 8;
+        while (bits >= 0) { out.push_back(kB64[(val >> bits) & 0x3F]); bits -= 6; }
+    }
+    if (bits > -6) out.push_back(kB64[((val << 8) >> (bits + 8)) & 0x3F]);
+    while (out.size() % 4) out.push_back('=');
+    return out;
+}
+std::string b64decode(const std::string& in) {
+    static int T[256]; static bool init = false;
+    if (!init) { for (int i = 0; i < 256; ++i) T[i] = -1;
+                 for (int i = 0; i < 64; ++i) T[(unsigned char)kB64[i]] = i; init = true; }
+    std::string out;
+    int val = 0, bits = -8;
+    for (unsigned char c : in) {
+        if (T[c] < 0) continue;   // 跳过 '=' 与空白
+        val = (val << 6) + T[c]; bits += 6;
+        if (bits >= 0) { out.push_back(char((val >> bits) & 0xFF)); bits -= 8; }
+    }
+    return out;
+}
+
 // ---------------- 写出 ----------------
 void writeMaterial(std::ostream& o, const MaterialParams& m) {
     o << "mat.albedo "      << m.albedo.x << ' ' << m.albedo.y << ' ' << m.albedo.z << '\n';
@@ -250,6 +277,25 @@ void writeNode(std::ostream& o, const TreeNode* n) {
         o << "path " << p.path << '\n';
         break;
     }
+    case NodeType::Custom: {
+        const auto& p = static_cast<const CustomNode*>(n)->params;
+        o << "count "       << p.count       << '\n';
+        o << "baseFlare "   << p.baseFlare   << '\n';
+        o << "taperPow "    << p.taperPow    << '\n';
+        o << "gravity "     << p.gravity     << '\n';
+        o << "noiseAmount " << p.noiseAmount << '\n';
+        o << "noiseFreq "   << p.noiseFreq   << '\n';
+        o << "gnarl "       << p.gnarl       << '\n';
+        o << "sides "       << p.sides       << '\n';
+        o << "lengthSegs "  << p.lengthSegs  << '\n';
+        o << "seed "        << p.seed        << '\n';
+        o << "uvTilingU "   << p.uvTilingU   << '\n';
+        o << "uvTilingV "   << p.uvTilingV   << '\n';
+        writeMaterial(o, p.material);
+        // 脚本 base64 编码为单行(放最后)
+        o << "scriptB64 " << b64encode(p.script) << '\n';
+        break;
+    }
     }
     o << "ENDNODE\n";
 }
@@ -462,6 +508,28 @@ void applyParams(TreeNode* n, const KV& kv) {
         p.specimenSpacing = getF(kv, "specimenSpacing", p.specimenSpacing);
         std::string s = getS(kv, "path");
         if (!s.empty()) p.path = s;
+        break;
+    }
+    case NodeType::Custom: {
+        auto& p = static_cast<CustomNode*>(n)->params;
+        p.count       = getI(kv, "count",       p.count);
+        p.baseFlare   = getF(kv, "baseFlare",   p.baseFlare);
+        p.taperPow    = getF(kv, "taperPow",    p.taperPow);
+        p.gravity     = getF(kv, "gravity",     p.gravity);
+        p.noiseAmount = getF(kv, "noiseAmount", p.noiseAmount);
+        p.noiseFreq   = getF(kv, "noiseFreq",   p.noiseFreq);
+        p.gnarl       = getF(kv, "gnarl",       p.gnarl);
+        p.sides       = getI(kv, "sides",       p.sides);
+        p.lengthSegs  = getI(kv, "lengthSegs",  p.lengthSegs);
+        p.seed        = getI(kv, "seed",        p.seed);
+        p.uvTilingU   = getF(kv, "uvTilingU",   p.uvTilingU);
+        p.uvTilingV   = getF(kv, "uvTilingV",   p.uvTilingV);
+        readMaterial(kv, p.material);
+        std::string b = getS(kv, "scriptB64");
+        if (!b.empty()) { std::string sc = b64decode(b); if (!sc.empty()) p.script = sc; }
+        // 也接受未编码的原始 script(方便 API/MCP 自动化直接写入)
+        std::string raw = getS(kv, "script");
+        if (!raw.empty()) p.script = raw;
         break;
     }
     }

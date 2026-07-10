@@ -99,3 +99,15 @@ public:
     std::unique_ptr<TreeNode> clone() const override { return std::make_unique<ExportNode>(*this); }
     void copyParamsFrom(const TreeNode* o) override { if (auto* p = dynamic_cast<const ExportNode*>(o)) params = p->params; }
 };
+
+// ---- Custom（脚本自定义枝条） ----
+class CustomNode : public TreeNode {
+public:
+    CustomParams params;
+    CustomNode();
+    NodeType    getType()  const override { return NodeType::Custom; }
+    const char* getLabel() const override { return "Custom"; }
+    bool        drawProperties() override;
+    std::unique_ptr<TreeNode> clone() const override { return std::make_unique<CustomNode>(*this); }
+    void copyParamsFrom(const TreeNode* o) override { if (auto* p = dynamic_cast<const CustomNode*>(o)) params = p->params; }
+};

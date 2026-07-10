@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(VegetationTool VERSION 0.1.0 LANGUAGES CXX)
+project(VegetationTool VERSION 0.1.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -31,6 +31,20 @@ target_include_directories(imgui_node_editor PUBLIC ${NE_DIR})
 target_link_libraries(imgui_node_editor PUBLIC imgui::imgui)
 target_compile_definitions(imgui_node_editor PUBLIC IMGUI_DEFINE_MATH_OPERATORS)
 
+# ---- Lua 5.4（手动集成: 编译为静态库，供自定义节点脚本用） ----
+set(LUA_DIR ${CMAKE_SOURCE_DIR}/external/lua-5.4.7/src)
+file(GLOB LUA_SOURCES "${LUA_DIR}/*.c")
+# 排除两个自带 main 的可执行入口
+list(REMOVE_ITEM LUA_SOURCES "${LUA_DIR}/lua.c" "${LUA_DIR}/luac.c")
+add_library(lua_static STATIC ${LUA_SOURCES})
+target_include_directories(lua_static PUBLIC ${LUA_DIR})
+
+# ---- sol2（单头 C++ 绑定库） ----
+add_library(sol2_header INTERFACE)
+target_include_directories(sol2_header INTERFACE ${CMAKE_SOURCE_DIR}/external/sol2)
+target_link_libraries(sol2_header INTERFACE lua_static)
+
+
 # ---- 源文件 ----
 file(GLOB_RECURSE SOURCES "src/*.cpp")
 
@@ -54,6 +68,7 @@ target_link_libraries(${PROJECT_NAME}
         imgui_node_editor
         httplib::httplib
         nlohmann_json::nlohmann_json
+        sol2_header
 )
 if(WIN32)
     target_link_libraries(${PROJECT_NAME} PRIVATE opengl32 comdlg32)

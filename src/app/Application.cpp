@@ -296,6 +296,7 @@ static const char* nodeTypeName(NodeType t) {
         case NodeType::Spine:       return "Spine";
         case NodeType::Frond:       return "Frond";
         case NodeType::Export:      return "Export";
+        case NodeType::Custom:      return "Custom";
     }
     return "Unknown";
 }
@@ -303,13 +304,13 @@ static const char* nodeTypeName(NodeType t) {
 static bool parseNodeType(const ApiServer::Json& v, NodeType& out) {
     if (v.is_number_integer()) {
         int i = v.get<int>();
-        if (i < 0 || i > (int)NodeType::Export) return false;
+        if (i < 0 || i > (int)NodeType::Custom) return false;
         out = (NodeType)i;
         return true;
     }
     if (v.is_string()) {
         std::string s = v.get<std::string>();
-        for (int i = 0; i <= (int)NodeType::Export; ++i)
+        for (int i = 0; i <= (int)NodeType::Custom; ++i)
             if (s == nodeTypeName((NodeType)i)) { out = (NodeType)i; return true; }
     }
     return false;

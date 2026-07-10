@@ -31,3 +31,6 @@ Thumbs.db
 # Python
 __pycache__/
 *.pyc
+
+# Lua source tarball (extracted to external/lua-5.4.7)
+external/lua.tar.gz

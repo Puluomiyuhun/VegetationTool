@@ -76,6 +76,12 @@ private:
         const std::vector<BranchRing>& parentRings,
         float parentLen, int depth);
 
+    // Custom：运行节点内 Lua 脚本得到枝条 spec 列表，沿用与 Branch 相同的圆柱/枝领/
+    // 子节点递归管线生成几何。脚本错误写回 node->params.lastError(不崩溃)。
+    void buildCustom(const CustomNode* node, const NodeGraph& graph,
+        const std::vector<BranchRing>& parentRings,
+        float parentLen, int depth);
+
     void buildTwig(const TwigNode* node, const NodeGraph& graph,
         const std::vector<BranchRing>& parentRings,
         float parentLen, int depth);

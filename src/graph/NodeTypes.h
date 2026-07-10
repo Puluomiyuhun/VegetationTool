@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 
-enum class NodeType { Trunk, Roots, Branch, Twig, LeafCluster, Spine, Frond, Export };
+enum class NodeType { Trunk, Roots, Branch, Twig, LeafCluster, Spine, Frond, Export, Custom };
 
 // Branch 分布模式(对标 SpeedTree Generation Mode)。目前仅实现 Classic(=现有分布行为)，
 // 其余模式先占位保留枚举与序号, 待后续逐个实现。
@@ -225,4 +225,50 @@ struct ExportParams {
     bool        singleFile = true;         // true=全部并排合到一个 obj; false=每变体一个文件(_序号后缀)
     float       specimenSpacing = 3.0f;    // 单文件并排时相邻标本的间距(沿 X 轴)
     bool        requestExport = false;     // 瞬时标志: UI 点击后置 true, 导出完成清零
+};
+
+// Custom：脚本自定义枝条节点(对标并超越 SpeedTree)。用户用 Lua 编写 generate(ctx) 函数，
+// 返回一个枝条数组，每根枝条给出 {t, azimuth, elevation, length, radius, endRatio}，
+// 引擎沿用与 Branch 相同的圆柱/枝领/子节点递归管线生成几何。脚本只产出参数(不碰内存)，
+// 因此安全且能自动接入风力/拾取/高亮/导出。
+// ctx 字段: count(用户可调整数), parentLen, parentRadius(附着半径), depth, seed,
+//           以及工具函数 rand()/rand(a,b)/noise(x)。
+inline const char* kDefaultCustomScript =
+    "-- generate(ctx) 返回枝条数组\n"
+    "-- 每根枝条: {t=附着位置[0,1], azimuth=方位角(度), elevation=仰角(度),\n"
+    "--            length=长度, radius=半径倍数, endRatio=末端锥度}\n"
+    "function generate(ctx)\n"
+    "  local out = {}\n"
+    "  for i = 0, ctx.count - 1 do\n"
+    "    local f = i / math.max(1, ctx.count - 1)\n"
+    "    out[#out+1] = {\n"
+    "      t         = 0.2 + 0.75 * f,\n"
+    "      azimuth   = i * 137.5,\n"
+    "      elevation = 50.0,\n"
+    "      length    = ctx.parentLen * 0.5 * (1.0 - 0.3 * f),\n"
+    "      radius    = 1.0,\n"
+    "      endRatio  = 0.25,\n"
+    "    }\n"
+    "  end\n"
+    "  return out\n"
+    "end\n";
+
+struct CustomParams {
+    std::string script;          // Lua 脚本(含 generate 函数)。空则用默认模板。
+    int   count        = 6;      // 传给脚本 ctx.count 的整数(枝条数/迭代次数)
+    // 几何管线参数(与 Branch 一致): 脚本只给逻辑，这些控制截面/锥度/扰动/风格。
+    float baseFlare    = 2.2f;   // 枝领裙边外扩倍数
+    float taperPow     = 1.5f;   // 锥度曲线幂
+    float gravity      = 0.18f;  // 重力下垂
+    float noiseAmount  = 30.0f;  // 样条噪声扰动强度(度)
+    float noiseFreq    = 3.0f;   // 噪声频率
+    float gnarl        = 10.0f;  // 螺旋扭曲总角度(度)
+    int   sides        = 6;      // 截面边数
+    int   lengthSegs   = 6;      // 长度细分
+    int   seed         = 8;      // 随机种子(传给脚本 ctx.seed)
+    float uvTilingU    = 1.0f;
+    float uvTilingV    = 2.0f;
+    MaterialParams material = {{0.32f,0.18f,0.08f}, 0.88f, 0.0f, 0.55f, 0.0f};
+
+    mutable std::string lastError;       // 瞬时: 最近一次脚本执行的错误信息(空=成功), 仅UI显示用
 };

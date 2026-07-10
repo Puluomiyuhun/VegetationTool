@@ -18,6 +18,7 @@ ImVec4 NodeEditorPanel::nodeColor(NodeType type) {
         case NodeType::Spine:       return {0.20f, 0.40f, 0.16f, 1.0f};
         case NodeType::Frond:       return {0.14f, 0.50f, 0.10f, 1.0f};
         case NodeType::Export:      return {0.20f, 0.30f, 0.55f, 1.0f};
+        case NodeType::Custom:      return {0.45f, 0.25f, 0.55f, 1.0f};
     }
     return {0.3f,0.3f,0.3f,1.0f};
 }
@@ -369,6 +370,8 @@ void NodeEditorPanel::handleContextMenu(NodeGraph& graph) {
             graph.addNode(NodeType::Spine, canvasPos);
         if (ImGui::MenuItem("Add Frond"))
             graph.addNode(NodeType::Frond, canvasPos);
+        if (ImGui::MenuItem("Add Custom (Lua)"))
+            graph.addNode(NodeType::Custom, canvasPos);
         ImGui::Separator();
         if (ImGui::MenuItem("Add Export"))
             graph.addNode(NodeType::Export, canvasPos);

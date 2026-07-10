@@ -138,6 +138,7 @@
   .c-green{background:var(--green-l);border-color:var(--green)}
   .c-blue{background:var(--blue-l);border-color:var(--blue)}
   .c-purple{background:var(--purple-l);border-color:var(--purple)}
+  .c-orange{background:var(--orange-l);border-color:var(--orange)}
 
   /* 上手步骤 */
   .steps{counter-reset:s;max-width:760px;margin:0 auto}
@@ -281,8 +282,8 @@
   <div class="wrap">
     <div class="sec-head">
       <div class="kicker">诞生初衷</div>
-      <h2>三件 SpeedTree 做不到的事</h2>
-      <p>SlowTree 不是"更便宜的 SpeedTree"。它之所以诞生，是因为有三件事，恰恰是今天的美术和技术美术最需要的。</p>
+      <h2>四件 SpeedTree 做不到的事</h2>
+      <p>SlowTree 不是"更便宜的 SpeedTree"。它之所以诞生，是因为有几件事，恰恰是今天的美术和技术美术最需要的。</p>
     </div>
 
     <!-- 优势1 -->
@@ -330,6 +331,25 @@
       </div>
       <div class="visual">
         <figure class="pic"><img src="assets/leafcutout.png" alt="叶片轮廓编辑器"/><figcaption>轮廓编辑器：自动识别贴图边缘，一键生成贴合剪影的叶片网格</figcaption></figure>
+      </div>
+    </div>
+
+    <!-- 优势4 -->
+    <div class="adv">
+      <div class="txt">
+        <div class="num" style="background:var(--orange)">4</div>
+        <span class="pill" style="background:var(--orange-l);color:#b06f00">可编程</span>
+        <h3>自定义节点：把枝条生成逻辑，交回你自己手里</h3>
+        <p>再强的内置参数，也总有覆盖不到的形态。SlowTree 内置一个 <b>Custom 自定义节点</b>，直接给你一个 <b>Lua 代码框</b>——你亲手写一段脚本，就能决定枝条从哪里长、朝哪个方向、多长多粗。</p>
+        <ul>
+          <li><b>规则由你定义</b> —— 用循环、数学、噪声算法算出每根枝条的位置与角度，黄金角螺旋、对生、轮生……想怎么排就怎么排</li>
+          <li><b>无缝接入现有管线</b> —— 脚本产出的枝条照样能挂子节点、长叶片、参与风力动画和导出</li>
+          <li><b>安全沙盒</b> —— 内置指令上限与枝条数量保护，写错脚本只会红字报错，绝不拖垮或崩溃软件</li>
+        </ul>
+        <div class="callout c-orange">⚡ <b>这一下把工具从"调参数"升到了"写规则"。</b>不用等官方更新某个形态，你自己就能造出内置节点做不到的结构——对 SpeedTree 这类封闭工具来说，这是天花板之外的一层维度。</div>
+      </div>
+      <div class="visual">
+        <figure class="pic"><img src="assets/custom-node.png" alt="自定义 Lua 节点代码框"/><figcaption>Custom 节点：写一段 Lua，亲手定义每根枝条的生成规则</figcaption></figure>
       </div>
     </div>
   </div>
