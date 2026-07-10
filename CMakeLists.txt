@@ -34,6 +34,11 @@ target_compile_definitions(imgui_node_editor PUBLIC IMGUI_DEFINE_MATH_OPERATORS)
 # ---- 源文件 ----
 file(GLOB_RECURSE SOURCES "src/*.cpp")
 
+# Windows: 附带资源文件(应用图标 + 版本信息)
+if(WIN32)
+    list(APPEND SOURCES ${CMAKE_SOURCE_DIR}/assets/app.rc)
+endif()
+
 add_executable(${PROJECT_NAME} ${SOURCES})
 
 target_include_directories(${PROJECT_NAME} PRIVATE src/ ${Stb_INCLUDE_DIR})

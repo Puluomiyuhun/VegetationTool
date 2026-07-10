@@ -1,0 +1,33 @@
+#include <windows.h>
+
+// 应用图标 (资源 ID 1 -> Windows 取工程内数值最小的图标作为 exe 图标)
+1 ICON "app.ico"
+
+// 版本信息
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION     0,1,0,0
+ PRODUCTVERSION  0,1,0,0
+ FILEFLAGSMASK   0x3fL
+ FILEFLAGS       0x0L
+ FILEOS          VOS__WINDOWS32
+ FILETYPE        VFT_APP
+ FILESUBTYPE     0x0L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "080404b0"
+        BEGIN
+            VALUE "CompanyName",      "SlowTree"
+            VALUE "FileDescription",  "SlowTree - Node-based Vegetation Generator"
+            VALUE "FileVersion",      "0.1.0.0"
+            VALUE "InternalName",     "VegetationTool"
+            VALUE "OriginalFilename", "VegetationTool.exe"
+            VALUE "ProductName",      "SlowTree"
+            VALUE "ProductVersion",   "0.1.0.0"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x804, 1200
+    END
+END
