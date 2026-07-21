@@ -23,6 +23,13 @@ void OrbitCamera::onScroll(float delta) {
     distance  = std::clamp(distance, 1.0f, 100.0f);
 }
 
+void OrbitCamera::flyMove(float fwd, float right, float up) {
+    // 平移 target: position 相对 target 由球坐标决定, 移动 target 即整机平移(飞行)。
+    glm::vec3 forward = glm::normalize(target - position());
+    glm::vec3 rightV  = glm::normalize(glm::cross(forward, glm::vec3(0,1,0)));
+    target += forward * fwd + rightV * right + glm::vec3(0,1,0) * up;
+}
+
 glm::vec3 OrbitCamera::position() const {
     float az = glm::radians(azimuth);
     float el = glm::radians(elevation);

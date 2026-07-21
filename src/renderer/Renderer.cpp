@@ -3,6 +3,7 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <cmath>
+#include <algorithm>
 
 void Renderer::init() {
     m_branchShader.loadFromFiles("shaders/branch.vert", "shaders/branch.frag");
@@ -13,7 +14,12 @@ void Renderer::init() {
     m_depthShader.loadFromFiles("shaders/depth.vert",   "shaders/depth.frag");
     m_groundShader.loadFromFiles("shaders/ground.vert", "shaders/ground.frag");
     m_outlineShader.loadFromFiles("shaders/outline.vert", "shaders/outline.frag");
+    m_taaShader.loadFromFiles("shaders/fullscreen.vert", "shaders/taa.frag");
+    m_fxaaShader.loadFromFiles("shaders/fullscreen.vert", "shaders/fxaa.frag");
+    m_presentShader.loadFromFiles("shaders/fullscreen.vert", "shaders/present.frag");
+    m_boneShader.loadFromFiles("shaders/bone.vert",     "shaders/bone.frag");
     glGenVertexArrays(1, &m_skyVao);
+    glGenVertexArrays(1, &m_fsVao);
     initShadowMap();
     buildGrid();
     buildGround();
@@ -46,6 +52,65 @@ void Renderer::initShadowMap() {
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
+// 按视口尺寸(重)建 TAA 目标: scene FBO(颜色 RGB16F + 深度纹理) + 两张 ping-pong 历史颜色。
+void Renderer::ensureTaaTargets(int w, int h) {
+    if (w == m_taaW && h == m_taaH && m_taaSceneFbo) return;
+    destroyTaaTargets();
+    m_taaW = w; m_taaH = h;
+    m_taaHaveHistory = false;   // 尺寸变化, 历史失效
+
+    // 场景颜色(RGB16F, 避免 clamp 混合掉色)
+    glGenTextures(1, &m_taaColorTex);
+    glBindTexture(GL_TEXTURE_2D, m_taaColorTex);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB16F, w, h, 0, GL_RGB, GL_FLOAT, nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+    // 深度纹理(供 TAA 重投影采样)。用 DEPTH24_STENCIL8 打包: 深度供采样, 模板供高亮描边。
+    glGenTextures(1, &m_taaDepthTex);
+    glBindTexture(GL_TEXTURE_2D, m_taaDepthTex);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH24_STENCIL8, w, h, 0,
+                 GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+    glGenFramebuffers(1, &m_taaSceneFbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, m_taaSceneFbo);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, m_taaColorTex, 0);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D, m_taaDepthTex, 0);
+
+    // 两张历史颜色
+    for (int i = 0; i < 2; ++i) {
+        glGenTextures(1, &m_taaHistTex[i]);
+        glBindTexture(GL_TEXTURE_2D, m_taaHistTex[i]);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB16F, w, h, 0, GL_RGB, GL_FLOAT, nullptr);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glGenFramebuffers(1, &m_taaHistFbo[i]);
+        glBindFramebuffer(GL_FRAMEBUFFER, m_taaHistFbo[i]);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, m_taaHistTex[i], 0);
+    }
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
+void Renderer::destroyTaaTargets() {
+    if (m_taaSceneFbo) { glDeleteFramebuffers(1, &m_taaSceneFbo); m_taaSceneFbo = 0; }
+    if (m_taaColorTex) { glDeleteTextures(1, &m_taaColorTex); m_taaColorTex = 0; }
+    if (m_taaDepthTex) { glDeleteTextures(1, &m_taaDepthTex); m_taaDepthTex = 0; }
+    for (int i = 0; i < 2; ++i) {
+        if (m_taaHistFbo[i]) { glDeleteFramebuffers(1, &m_taaHistFbo[i]); m_taaHistFbo[i] = 0; }
+        if (m_taaHistTex[i]) { glDeleteTextures(1, &m_taaHistTex[i]); m_taaHistTex[i] = 0; }
+    }
+    m_taaW = m_taaH = 0;
+    m_taaHaveHistory = false;
+}
+
 void Renderer::shutdown() {
     m_branchShader.destroy();
     m_leafShader.destroy();
@@ -55,7 +120,13 @@ void Renderer::shutdown() {
     m_depthShader.destroy();
     m_groundShader.destroy();
     m_outlineShader.destroy();
+    m_taaShader.destroy();
+    m_fxaaShader.destroy();
+    m_presentShader.destroy();
+    m_boneShader.destroy();
     if (m_skyVao) { glDeleteVertexArrays(1, &m_skyVao); m_skyVao = 0; }
+    if (m_fsVao)  { glDeleteVertexArrays(1, &m_fsVao);  m_fsVao  = 0; }
+    destroyTaaTargets();
     if (m_shadowFbo) { glDeleteFramebuffers(1, &m_shadowFbo); m_shadowFbo = 0; }
     if (m_shadowTex) { glDeleteTextures(1, &m_shadowTex); m_shadowTex = 0; }
     for (auto& b : m_batches)
@@ -234,6 +305,8 @@ void Renderer::uploadTreeMesh(const TreeMeshData& data) {
     // 拾取三角(世界坐标 + 节点归属): 供鼠标射线拾取
     m_pickTris = data.pickTris;
 
+    buildSkeletonMesh(data);
+
     computeSceneBounds(data);
 }
 
@@ -387,14 +460,111 @@ void Renderer::render(const OrbitCamera& camera, float aspect, bool wireframe) {
         glViewport(prevVp[0], prevVp[1], prevVp[2], prevVp[3]);
     }
 
-    // 2) 主 pass
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glm::mat4 view = camera.viewMatrix();
+    int w = prevVp[2], h = prevVp[3];
 
-    // 先画渐变天空背景(覆盖整个视口，替代纯色 clear)
+    // ---- None 路径: 直接画到目标 FBO ----
+    if (aaMode == AAMode::None || w <= 0 || h <= 0) {
+        glm::mat4 proj = camera.projectionMatrix(aspect);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        renderSceneContent(camera, aspect, proj, view, wireframe);
+        m_taaHaveHistory = false;   // 关闭时清空历史, 再开启不会用到陈旧帧
+        return;
+    }
+
+    // FXAA/TAA 都要先把场景画到离屏 scene FBO(复用同一目标)。
+    ensureTaaTargets(w, h);
+
+    // ---- FXAA 路径: 场景 → scene FBO → FXAA → 目标 FBO ----
+    if (aaMode == AAMode::FXAA) {
+        glm::mat4 proj = camera.projectionMatrix(aspect);
+        glBindFramebuffer(GL_FRAMEBUFFER, m_taaSceneFbo);
+        glViewport(0, 0, w, h);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        renderSceneContent(camera, aspect, proj, view, wireframe);
+
+        glBindFramebuffer(GL_FRAMEBUFFER, prevFbo);
+        glViewport(prevVp[0], prevVp[1], prevVp[2], prevVp[3]);
+        glDisable(GL_DEPTH_TEST);
+        m_fxaaShader.use();
+        glActiveTexture(GL_TEXTURE0); glBindTexture(GL_TEXTURE_2D, m_taaColorTex);
+        m_fxaaShader.setInt("uTex", 0);
+        m_fxaaShader.setVec4("uTexel", 1.0f / (float)w, 1.0f / (float)h, 0, 0);
+        glBindVertexArray(m_fsVao);
+        glDrawArrays(GL_TRIANGLES, 0, 3);
+        glBindVertexArray(0);
+        glEnable(GL_DEPTH_TEST);
+        m_taaHaveHistory = false;
+        return;
+    }
+
+    // ---- TAA 路径 ----
+
+    // 亚像素抖动(Halton(2,3) 序列, 映射到 [-0.5,0.5] 像素), 注入投影矩阵的 xy 平移。
+    auto halton = [](int i, int b) {
+        float f = 1.0f, r = 0.0f;
+        while (i > 0) { f /= b; r += f * (i % b); i /= b; }
+        return r;
+    };
+    int hi = (m_taaFrame % 16) + 1;
+    float jx = (halton(hi, 2) - 0.5f);
+    float jy = (halton(hi, 3) - 0.5f);
+    glm::mat4 proj = camera.projectionMatrix(aspect);
+    glm::mat4 jproj = proj;
+    jproj[2][0] += (2.0f * jx) / (float)w;   // 裁剪空间平移 = 2*像素抖动/分辨率
+    jproj[2][1] += (2.0f * jy) / (float)h;
+
+    // a) 场景 pass → scene FBO(带抖动投影)
+    glBindFramebuffer(GL_FRAMEBUFFER, m_taaSceneFbo);
+    glViewport(0, 0, w, h);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    renderSceneContent(camera, aspect, jproj, view, wireframe);
+
+    // b) TAA resolve → history[cur]
+    glm::mat4 unjitVP = proj * view;   // 未抖动 viewProj, 用于重投影
+    int cur = m_taaCur;
+    int prev = 1 - cur;
+    glBindFramebuffer(GL_FRAMEBUFFER, m_taaHistFbo[cur]);
+    glViewport(0, 0, w, h);
+    glDisable(GL_DEPTH_TEST);
+    m_taaShader.use();
+    glActiveTexture(GL_TEXTURE0); glBindTexture(GL_TEXTURE_2D, m_taaColorTex);
+    m_taaShader.setInt("uCurrent", 0);
+    glActiveTexture(GL_TEXTURE1); glBindTexture(GL_TEXTURE_2D, m_taaHistTex[prev]);
+    m_taaShader.setInt("uHistory", 1);
+    glActiveTexture(GL_TEXTURE2); glBindTexture(GL_TEXTURE_2D, m_taaDepthTex);
+    m_taaShader.setInt("uDepth", 2);
+    glm::mat4 invUnjitVP = glm::inverse(unjitVP);
+    m_taaShader.setMat4("uInvViewProj",  glm::value_ptr(invUnjitVP));
+    m_taaShader.setMat4("uPrevViewProj", glm::value_ptr(m_taaPrevViewProj));
+    m_taaShader.setVec4("uTexel", 1.0f / (float)w, 1.0f / (float)h, 0, 0);  // 用不到 zw
+    m_taaShader.setFloat("uBlend", m_taaHaveHistory ? 0.9f : 0.0f);
+    glBindVertexArray(m_fsVao);
+    glDrawArrays(GL_TRIANGLES, 0, 3);
+
+    // c) present → 目标 FBO
+    glBindFramebuffer(GL_FRAMEBUFFER, prevFbo);
+    glViewport(prevVp[0], prevVp[1], prevVp[2], prevVp[3]);
+    m_presentShader.use();
+    glActiveTexture(GL_TEXTURE0); glBindTexture(GL_TEXTURE_2D, m_taaHistTex[cur]);
+    m_presentShader.setInt("uTex", 0);
+    glDrawArrays(GL_TRIANGLES, 0, 3);
+    glBindVertexArray(0);
+    glEnable(GL_DEPTH_TEST);
+
+    // 记录状态供下帧: 交换历史槽, 保存未抖动 viewProj, 帧计数递增。
+    m_taaPrevViewProj = unjitVP;
+    m_taaCur = prev;
+    m_taaHaveHistory = true;
+    ++m_taaFrame;
+}
+
+// 场景内容: 天空 + 网格 + 枝叶(实例) + 地面 + 高亮。proj 可含 TAA 抖动。
+void Renderer::renderSceneContent(const OrbitCamera& camera, float aspect,
+                                  const glm::mat4& proj, const glm::mat4& view, bool wireframe) {
+    // 先画渐变天空背景(覆盖整个视口)
     renderSky(camera, aspect);
 
-    glm::mat4 view  = camera.viewMatrix();
-    glm::mat4 proj  = camera.projectionMatrix(aspect);
     glm::mat4 model = glm::mat4(1.0f);
     glm::mat4 vp    = proj * view;
 
@@ -490,6 +660,9 @@ void Renderer::render(const OrbitCamera& camera, float aspect, bool wireframe) {
 
     // 选中节点高亮线框(黄色叠加): 关闭深度测试, 让高亮始终浮在模型之上
     renderHighlight(vp);
+
+    // 骨骼可视化(每级一色, 恒浮于网格之上)
+    if (showSkeleton) renderSkeleton(vp);
 }
 
 // 选中节点自身的轮廓描边(类 SpeedTree 选中效果)。用模板缓冲勾勒外轮廓而非线框:
@@ -532,7 +705,74 @@ void Renderer::renderHighlight(const glm::mat4& vp) {
     glEnable(GL_DEPTH_TEST);
 }
 
-// 鼠标射线拾取: 把 NDC 反投影成世界射线, 与所有拾取三角求最近交点, 返回其节点 id。
+// 由骨架生成线段网格: 每根骨画一条 "父→本骨" 的线, 按父链深度取色(每级一色)。
+// 顶点格式 pos(3)+color(3)。无父的根骨没有线段(跳过)。
+void Renderer::buildSkeletonMesh(const TreeMeshData& data) {
+    m_boneMesh.destroy();
+    m_boneVertCount = 0;
+    const auto& sk = data.skeleton;
+    if (sk.empty()) return;
+
+    // 每骨的父链深度(根=0)。父索引已保证父在前(拓扑序), 直接递推。
+    std::vector<int> depth(sk.size(), 0);
+    int maxDepth = 0;
+    for (size_t i = 0; i < sk.size(); ++i) {
+        int p = sk[i].parent;
+        depth[i] = (p >= 0 && p < (int)i) ? depth[p] + 1 : 0;
+        maxDepth = std::max(maxDepth, depth[i]);
+    }
+
+    // 深度 → 颜色: 沿 HSV 色相环循环, 每级一个鲜明颜色。
+    auto colorForDepth = [](int d) -> glm::vec3 {
+        float h = std::fmod(d * 0.137f, 1.0f);   // 黄金角步进, 相邻级色相差异大
+        float s = 0.85f, v = 1.0f;
+        float hh = h * 6.0f;
+        int   i  = (int)hh;
+        float ff = hh - i;
+        float p = v * (1.0f - s);
+        float q = v * (1.0f - s * ff);
+        float t = v * (1.0f - s * (1.0f - ff));
+        switch (i % 6) {
+            case 0:  return {v, t, p};
+            case 1:  return {q, v, p};
+            case 2:  return {p, v, t};
+            case 3:  return {p, q, v};
+            case 4:  return {t, p, v};
+            default: return {v, p, q};
+        }
+    };
+
+    std::vector<float>    verts;
+    std::vector<uint32_t> idx;
+    verts.reserve(sk.size() * 12);
+    for (size_t i = 0; i < sk.size(); ++i) {
+        int p = sk[i].parent;
+        if (p < 0 || p >= (int)sk.size()) continue;   // 根骨无线段
+        glm::vec3 c = colorForDepth(depth[i]);
+        const glm::vec3& a = sk[p].pos;
+        const glm::vec3& b = sk[i].pos;
+        verts.insert(verts.end(), {a.x, a.y, a.z, c.x, c.y, c.z,
+                                   b.x, b.y, b.z, c.x, c.y, c.z});
+    }
+    for (uint32_t i = 0; i < (uint32_t)(verts.size() / 6); ++i) idx.push_back(i);
+    if (verts.empty()) return;
+    m_boneMesh.create(verts, idx, {3, 3});
+    m_boneVertCount = (int)idx.size();
+}
+
+// 绘制骨骼线段: 关深度测试(恒浮于网格之上), 加粗线宽。
+void Renderer::renderSkeleton(const glm::mat4& vp) {
+    if (!m_boneMesh.valid() || m_boneVertCount == 0) return;
+    glDisable(GL_DEPTH_TEST);
+    glLineWidth(2.0f);
+    m_boneShader.use();
+    m_boneShader.setMat4("uViewProjection", glm::value_ptr(vp));
+    m_boneMesh.draw(GL_LINES);
+    glLineWidth(1.0f);
+    glEnable(GL_DEPTH_TEST);
+}
+
+
 uint32_t Renderer::pickNode(const OrbitCamera& camera, float aspect,
                             float ndcX, float ndcY) const {
     if (m_pickTris.empty()) return 0;

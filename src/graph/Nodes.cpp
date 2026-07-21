@@ -685,7 +685,16 @@ bool ScatterNode::drawProperties() {
         }
     }
     if (ImGui::CollapsingHeader("Scatter", ImGuiTreeNodeFlags_DefaultOpen)) {
-        changed |= ImGui::SliderInt  ("Count/Twig",    &params.count,        1, 30);
+        const char* distItems[] = { "随机数量 (Random)", "等距交错 (Even Step)" };
+        int dist = (int)params.distribution;
+        if (ImGui::Combo("Distribution", &dist, distItems, 2)) {
+            params.distribution = (ScatterParams::Distribution)dist;
+            changed = true;
+        }
+        if (params.distribution == ScatterParams::Distribution::EvenStep)
+            changed |= ImGui::SliderFloat("Even Spacing", &params.evenSpacing, 0.02f, 0.5f);
+        else
+            changed |= ImGui::SliderInt  ("Count/Twig",    &params.count,        1, 30);
         changed |= ImGui::SliderFloat("Leaf Scale",    &params.leafScale,    0.05f, 5.0f);
         changed |= ImGui::SliderFloat("Scale Var",     &params.leafScaleVar, 0.0f, 2.0f);
         changed |= ImGui::SliderFloat("Region Start",  &params.regionStart,  0.0f, 1.0f);

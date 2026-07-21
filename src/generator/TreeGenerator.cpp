@@ -1516,6 +1516,18 @@ std::vector<BranchRing> TreeGenerator::buildImportTrunk(const ImportTrunkNode* n
             sb.boneWt.push_back(i < mesh.boneWt.size() ? mesh.boneWt[i] : glm::vec4(0.0f));
         }
         sb.idx = mesh.indices;
+        // 材质分段: 从导入网格的 parts 拷过来, 供 USD 导出为 GeomSubset(多材质槽)。
+        // 单材质(parts≤1)时留空, 导出走整块单槽。
+        sb.subs.clear();
+        if (mesh.parts.size() >= 2) {
+            for (const auto& pt : mesh.parts) {
+                TreeMeshData::ProtoSub ps;
+                ps.idxOffset = pt.indexOffset;
+                ps.idxCount  = pt.indexCount;
+                ps.material  = pt.material;
+                sb.subs.push_back(ps);
+            }
+        }
     }
     return rings;
 }
@@ -1596,10 +1608,28 @@ void TreeGenerator::buildScatter(const ScatterNode* node,
         if (src.parts.empty()) {
             appendRange(0, (uint32_t)src.indices.size(), p.material);
         } else {
+            // 叶子段材质 = FBX 自带材质为底(保留其贴图), 用 Scatter 节点材质覆盖:
+            //   标量(albedo/roughness/metallic/ao/sss/alphaCutoff) 直接取 Scatter(供用户调节);
+            //   贴图仅当 Scatter 里填了(非空)才覆盖, 否则保留 FBX 自带叶贴图。
+            // 这样"在 Scatter 上调叶子材质"真正生效, 又不会抹掉导入的叶贴图。trunkPart 段不受影响。
+            auto overlayLeafMat = [&](const MaterialParams& base) {
+                MaterialParams m = base;
+                m.albedo      = p.material.albedo;
+                m.roughness   = p.material.roughness;
+                m.metallic    = p.material.metallic;
+                m.aoStrength  = p.material.aoStrength;
+                m.sssStrength = p.material.sssStrength;
+                m.alphaCutoff = p.material.alphaCutoff;
+                if (!p.material.baseColorTex.empty()) m.baseColorTex = p.material.baseColorTex;
+                if (!p.material.roughnessTex.empty()) m.roughnessTex = p.material.roughnessTex;
+                if (!p.material.normalTex.empty())    m.normalTex    = p.material.normalTex;
+                if (!p.material.opacityTex.empty())   m.opacityTex   = p.material.opacityTex;
+                return m;
+            };
             for (int pi = 0; pi < (int)src.parts.size(); ++pi) {
                 const auto& sm = src.parts[pi];
-                const MaterialParams& mat = (pi == var.trunkPart)
-                    ? m_scatterTrunkMaterial : sm.material;
+                const MaterialParams mat = (pi == var.trunkPart)
+                    ? m_scatterTrunkMaterial : overlayLeafMat(sm.material);
                 appendRange(sm.indexOffset, sm.indexCount, mat);
             }
         }
@@ -1640,17 +1670,90 @@ void TreeGenerator::buildScatter(const ScatterNode* node,
     // cand: 该段对应的枝干 mesh 顶点索引(叶端骨 + 父骨主导)。为空则不撒(避免悬空)。
     // 核心: 茎基 = 真实枝表面顶点(positions[vi]), 朝外方向 = 该顶点法线。叶端骨常延伸到
     //       空中(原树叶位), 其自身无 mesh 顶点, 落点自然回退到父骨的枝末梢表面顶点 → 不悬空。
-    auto scatterSegment = [&](glm::vec3 twigDirW, float g01, int boneIdx,
-                              const std::vector<int>& cand) {
+    // segRootN/segTipN: 该枝段两端在 native(未乘 s/off) 骨位, 用于把"轴向进度 t"
+    // 锚定到真实枝根关节(t=0=根, t=1=末端骨), 而非候选顶点簇自身的最小投影。
+    auto scatterSegment = [&](glm::vec3 twigDirW, glm::vec3 segRootN, glm::vec3 segTipN,
+                              float g01, int boneIdx, const std::vector<int>& cand) {
         if (cand.empty()) return;
         glm::vec3 twigDir = (glm::length(twigDirW) > 1e-6f) ? glm::normalize(twigDirW) : glm::vec3(0,1,0);
         float falloff = glm::mix(1.0f, p.tipScale, glm::clamp(g01, 0.0f, 1.0f));
         float s = m_scatterTrunkScale;
         glm::vec3 off = m_scatterTrunkOffset;
         const auto& mp = *m_scatterTrunk;
-        std::uniform_int_distribution<size_t> pick(0, cand.size() - 1);
-        for (int j = 0; j < p.count; ++j) {
-            int vi = cand[pick(rng)];
+
+        // 轴向进度原点锚定到枝根关节 segRootN(而非顶点簇最小投影), 跨度到末端骨 segTipN。
+        // 这样 Region Start=0 / t=0 真正对应"枝与主干连接的根部", 首叶不再漂到中上段。
+        float rootProj = glm::dot(segRootN, twigDir);
+        float tipProj  = glm::dot(segTipN,  twigDir);
+        float axSpan   = tipProj - rootProj;
+        if (std::abs(axSpan) < 1e-5f) {   // 骨段退化(末端骨=父骨): 回退到候选顶点跨度
+            float amn = 1e9f, amx = -1e9f;
+            for (int vi : cand) { float a = glm::dot(mp.positions[vi], twigDir); amn = std::min(amn,a); amx = std::max(amx,a); }
+            rootProj = amn; axSpan = (amx - amn > 1e-6f) ? (amx - amn) : 1.0f;
+        }
+
+        // Region 过滤: 顶点沿 twigDir 投影按根锚归一, 只保留 [rs,re]。
+        std::vector<int> region;
+        if (rs > 1e-4f || re < 1.0f - 1e-4f) {
+            for (int vi : cand) {
+                float frac = (glm::dot(mp.positions[vi], twigDir) - rootProj) / axSpan;
+                if (frac >= rs && frac <= re) region.push_back(vi);
+            }
+        }
+        const std::vector<int>& pool = region.empty() ? cand : region;
+
+        // 建立骨轴柱坐标系: twigDir 为轴, (r0,f0) 为环向基。给每个候选顶点算 (t, θ):
+        //   t = 沿轴按根锚归一进度(t=0=枝根关节), θ = 绕轴方位角(atan2)。
+        // 这样把"骨轴进度"映射到真实 mesh 顶点上, Spiral/Region 得以在嫁接方案下复活。
+        glm::vec3 r0 = perpendicular(twigDir);
+        glm::vec3 f0 = glm::normalize(glm::cross(twigDir, r0));
+        std::vector<float> vt(pool.size()), vth(pool.size());
+        for (size_t k = 0; k < pool.size(); ++k) {
+            const glm::vec3& q = mp.positions[pool[k]];
+            vt[k]  = (glm::dot(q, twigDir) - rootProj) / axSpan;
+            glm::vec3 perp = q - twigDir * glm::dot(q, twigDir);
+            vth[k] = std::atan2(glm::dot(perp, f0), glm::dot(perp, r0));
+        }
+
+        float spiralRad = glm::radians(p.spiralStep);
+        // 撒叶数量与轴向进度按分布模式决定:
+        //   Random  : 固定 count 片, 轴向 [rs,re] 格心均布。
+        //   EvenStep: 按 evenSpacing 等距铺满 [rs,re](不设数量), 交错叶序。
+        int   nLeaves; float tStep, tBase;
+        if (p.distribution == ScatterParams::Distribution::EvenStep) {
+            float span = std::max(0.0f, re - rs);
+            float sp   = std::max(0.01f, p.evenSpacing);
+            nLeaves = std::max(1, (int)std::floor(span / sp) + 1);
+            tStep = sp; tBase = rs;
+        } else {
+            nLeaves = p.count;
+            // 从 rs 起按端点均布(含起点): Region Start=0 时首叶真正贴枝根, 而非格心的半步偏移。
+            tStep = (nLeaves > 1) ? (re - rs) / (float)(nLeaves - 1) : 0.0f;
+            tBase = rs;
+        }
+        // 已用顶点标记: 避免两片叶 snap 到同一顶点(表现为"两枝长在同一进度上"重叠)。
+        // 顶点数够时强制唯一; 池被用尽(叶多于顶点)才允许复用。
+        std::vector<char> used(pool.size(), 0);
+        for (int j = 0; j < nLeaves; ++j) {
+            // 理想螺旋采样点: 轴向按模式等距/格心推进, 环向按 spiralStep 步进(叶序)。
+            float tj  = tBase + tStep * (float)j;
+            float thj = spiralRad * (float)j;
+            if (p.distribution == ScatterParams::Distribution::Random)
+                thj += (rot01(rng) - 0.5f) * 0.6f;   // Random 加轻抖动破规整; EvenStep 保持严格等距交错
+            // snap 到 (t,θ) 代价最小且未被占用的真实顶点。轴向权重更大(进度均匀优先), 环向归一到[0,1]。
+            int best = -1; float bestCost = 1e30f;
+            int bestAny = -1; float bestAnyCost = 1e30f;   // 全部占用时的兜底(最近顶点)
+            for (size_t k = 0; k < pool.size(); ++k) {
+                float dt = vt[k] - tj;
+                float da = vth[k] - thj;
+                da = std::atan2(std::sin(da), std::cos(da)) / 3.14159265f;   // 角差归一到[-1,1]
+                float cost = dt * dt + 0.25f * da * da;
+                if (cost < bestAnyCost) { bestAnyCost = cost; bestAny = (int)k; }
+                if (!used[k] && cost < bestCost) { bestCost = cost; best = (int)k; }
+            }
+            if (best < 0) best = bestAny;   // 顶点被用尽, 复用最近的
+            used[best] = 1;
+            int vi = pool[best];
             // 茎基 = 真实枝皮顶点(世界系)。这才是"嫁接到 mesh 位置", 不再沿骨轴插值。
             glm::vec3 attach = mp.positions[vi] * s + off;
             // 朝外方向 = 顶点法线。法线无效时退回径向(顶点相对段方向的垂向)。
@@ -1717,7 +1820,8 @@ void TreeGenerator::buildScatter(const ScatterNode* node,
                 cand = boneVerts[bi];
             else
                 cand = boneVerts[par];
-            scatterSegment(twigDirW, g01, bi, cand);  // bi = 该叶簇所属 leafTwig 骨索引(刚性绑定)
+            scatterSegment(twigDirW, bones[par].restPos, bones[bi].restPos,
+                           g01, bi, cand);  // native 骨位: 轴向进度锚定到枝根关节
         }
     } else {
         // 退化路径: 沿父级 rings 撒 count 片(无骨骼枝干)。

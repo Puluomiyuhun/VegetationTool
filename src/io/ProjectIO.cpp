@@ -334,6 +334,8 @@ void writeNode(std::ostream& o, const TreeNode* n) {
     }
     case NodeType::Scatter: {
         const auto& p = static_cast<const ScatterNode*>(n)->params;
+        o << "distribution " << (int)p.distribution << '\n';
+        o << "evenSpacing "  << p.evenSpacing  << '\n';
         o << "count "        << p.count        << '\n';
         o << "leafScale "    << p.leafScale    << '\n';
         o << "leafScaleVar " << p.leafScaleVar << '\n';
@@ -620,6 +622,8 @@ void applyParams(TreeNode* n, const KV& kv) {
     }
     case NodeType::Scatter: {
         auto& p = static_cast<ScatterNode*>(n)->params;
+        p.distribution = (ScatterParams::Distribution)getI(kv, "distribution", (int)p.distribution);
+        p.evenSpacing  = getF(kv, "evenSpacing",  p.evenSpacing);
         p.count        = getI(kv, "count",        p.count);
         p.leafScale    = getF(kv, "leafScale",    p.leafScale);
         p.leafScaleVar = getF(kv, "leafScaleVar", p.leafScaleVar);

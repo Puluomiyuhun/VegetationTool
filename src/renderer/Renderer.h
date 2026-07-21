@@ -56,7 +56,10 @@ struct TreeMeshData {
         std::vector<uint32_t>   idx;
         std::vector<glm::ivec4> boneIdx;   // 骨索引, 空槽 = -1
         std::vector<glm::vec4>  boneWt;    // 权重(归一)
-        MaterialParams          material;
+        MaterialParams          material;  // 兼容字段(= subs[0].material)
+        // 按材质分段(≥1): 每段一个 GeomSubset(familyName=materialBind), UE 导入后成独立材质槽。
+        // 单材质时留空, 导出走整块单槽。
+        std::vector<ProtoSub>   subs;
     };
     std::vector<SkelBone> skeleton;   // 空 = 无骨架(走 staticMesh 导出)
     SkinBase              skinBase;   // 树干蒙皮 base(skeleton 非空时有效)
@@ -126,6 +129,18 @@ public:
     WindParams     wind;
     float          windTime = 0.0f;  // 每帧由 Application 更新为 glfwGetTime()
 
+    // 后处理抗锯齿模式。专治叶片 alpha-test 硬边在交融处的锯齿/闪烁。
+    //   None: 仅靠 MSAA(对 alpha-test 边缘无效)
+    //   FXAA: 单帧边缘模糊, 锐利无拖影, 亚像素闪烁抑制弱
+    //   TAA : 逐帧亚像素抖动 + 深度重投影历史混合, 静态最干净, 运动时可能轻微拖影
+    enum class AAMode { None = 0, FXAA = 1, TAA = 2 };
+    AAMode aaMode = AAMode::TAA;
+    void  resetTaaHistory() { m_taaHaveHistory = false; }
+
+    // 骨骼可视化: 把导入枝干的骨架画成线段, 每级(按父链深度)一种颜色, 方便查看绑定。
+    // 关深度测试, 骨骼恒浮于网格之上。仅当 skinBase 有骨架时有内容。
+    bool showSkeleton = false;
+
 private:
     struct GpuBatch {
         Mesh           mesh;
@@ -172,10 +187,16 @@ private:
     Shader m_depthShader;   // 阴影深度 pass
     Shader m_groundShader;  // 地面(接收投影)
     Shader m_outlineShader; // 选中描边(沿法线外扩纯色)
+    Shader m_taaShader;     // TAA resolve(全屏)
+    Shader m_fxaaShader;    // FXAA(全屏)
+    Shader m_presentShader; // 呈现/拷贝(全屏)
+    Shader m_boneShader;    // 骨骼线段(逐顶点颜色)
     Mesh   m_gridMesh;
     Mesh   m_groundMesh;    // 地面平面
     Mesh   m_hlMesh;        // 选中节点高亮描边(pos+normal)
     int    m_hlIndexCount = 0;
+    Mesh   m_boneMesh;      // 骨骼线段(pos+color); 每帧上传变化不大, 随 uploadTreeMesh 重建
+    int    m_boneVertCount = 0;
     std::vector<TreeMeshData::PickTri> m_pickTris;  // 鼠标射线拾取用的三角形
     GLuint m_skyVao = 0;   // 空 VAO，用于全屏三角形(顶点由 gl_VertexID 生成)
 
@@ -192,13 +213,35 @@ private:
     void computeSceneBounds(const TreeMeshData& data);
     void renderShadowPass();
 
+    // ---- TAA ----
+    // scene FBO: 单采样离屏, 存本帧场景颜色(HDR-ish RGB16F)+深度纹理(供重投影)。
+    // history[2]: ping-pong 历史颜色。resolve 时读 prev, 写 cur, 呈现后交换。
+    GLuint m_taaSceneFbo   = 0;
+    GLuint m_taaColorTex   = 0;   // 本帧场景颜色
+    GLuint m_taaDepthTex   = 0;   // 本帧深度(采样用)
+    GLuint m_taaHistFbo[2] = {0, 0};
+    GLuint m_taaHistTex[2] = {0, 0};
+    int    m_taaW = 0, m_taaH = 0;
+    int    m_taaCur = 0;          // 当前写入的 history 槽
+    int    m_taaFrame = 0;        // 帧计数(驱动 Halton 抖动序列)
+    bool   m_taaHaveHistory = false;
+    glm::mat4 m_taaPrevViewProj = glm::mat4(1.0f);
+    GLuint m_fsVao = 0;           // 全屏三角空 VAO
+    void ensureTaaTargets(int w, int h);   // 按视口尺寸(重)建 TAA 目标
+    void destroyTaaTargets();
+
     void setLightUniforms(Shader& sh);
     void setWindUniforms(Shader& sh);
     void bindBatchTextures(Shader& sh, GpuBatch& gb);
+    // 场景内容绘制(天空/网格/枝叶/地面/高亮), proj 可含 TAA 抖动, view/camera 用于天空与地面。
+    void renderSceneContent(const OrbitCamera& camera, float aspect,
+                            const glm::mat4& proj, const glm::mat4& view, bool wireframe);
     void buildGrid();
     void buildGround();
     void renderGrid(const glm::mat4& vp);
     void renderGround(const glm::mat4& vp, const glm::vec3& camPos);
     void renderSky(const OrbitCamera& camera, float aspect);
     void renderHighlight(const glm::mat4& vp);   // 选中节点子树黄色线框叠加
+    void renderSkeleton(const glm::mat4& vp);    // 骨骼线段(每级一色)
+    void buildSkeletonMesh(const TreeMeshData& data);  // 由 skeleton 生成线段+颜色
 };

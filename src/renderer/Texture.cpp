@@ -23,6 +23,19 @@ bool Texture::loadFromFile(const std::string& path, bool sRGB) {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    // 各向异性过滤: 斜视角(如仰视树干)下纹理沿一轴被压缩, 各向同性 mipmap 会选过粗的 LOD
+    // 导致长轴方向严重模糊。开各向异性(取硬件上限, 最多 16x)保留斜视角下的高频细节。
+    // GL_EXT_texture_filter_anisotropic 几乎所有硬件都支持; 常量若未定义则本地补上。
+#ifndef GL_TEXTURE_MAX_ANISOTROPY_EXT
+#define GL_TEXTURE_MAX_ANISOTROPY_EXT     0x84FE
+#define GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT 0x84FF
+#endif
+    GLfloat maxAniso = 1.0f;
+    glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT, &maxAniso);
+    if (maxAniso > 1.0f) {
+        GLfloat aniso = maxAniso < 16.0f ? maxAniso : 16.0f;
+        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY_EXT, aniso);
+    }
     glBindTexture(GL_TEXTURE_2D, 0);
 
     stbi_image_free(data);

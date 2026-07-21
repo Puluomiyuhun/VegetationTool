@@ -351,7 +351,14 @@ struct ScatterParams {
     };
     std::vector<Variant> variants;       // 叶原型变体(散布用的枝叶单体, 均匀随机选取)
 
-    int         count       = 3;         // 每根末端细枝上撒的叶实例数
+    // 撒叶分布模式:
+    //   Random  = 固定数量(count), 沿枝按螺旋进度均布采样后 snap 到最近真实顶点(带抖动)。
+    //   EvenStep= 不设数量, 沿枝轴按等距进度(spacing, 归一[0,1])交错撒叶(叶序 spiralStep 环向步进)。
+    enum class Distribution { Random = 0, EvenStep = 1 };
+    Distribution distribution = Distribution::Random;
+
+    int         count       = 3;         // [Random]每根末端细枝上撒的叶实例数
+    float       evenSpacing  = 0.12f;    // [EvenStep]沿枝轴等距进度间隔(归一[0,1]), 越小越密
     float       leafScale    = 1.0f;     // 每片叶缩放(相对原型)
     float       leafScaleVar = 0.0f;     // 缩放抖动 ±
     float       regionStart  = 0.1f;     // 沿细枝[start,end]区间撒叶

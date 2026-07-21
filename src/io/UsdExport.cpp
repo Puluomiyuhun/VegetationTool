@@ -169,6 +169,15 @@ static bool exportSkeletalUSD(const TreeMeshData& mesh, const std::string& path)
     size_t N = bones.size();
     if (N == 0 || sb.pts.empty()) return false;
 
+    // 材质收集: UE USD 导入靠 rel material:binding 生成材质槽(displayColor 不算)。
+    // 各 mesh 段收集到此, 最后在 Root 内统一写 def Scope "Materials"(UsdPreviewSurface 空壳)。
+    struct MatEntry { std::string name; glm::vec3 col; };
+    std::vector<MatEntry> mats;
+    auto addMat = [&](const std::string& nm, const glm::vec3& col) -> std::string {
+        mats.push_back({nm, col});
+        return "</Root/Materials/" + nm + ">";
+    };
+
     // 1) 每骨: 唯一段名 + 完整路径(按父链拼接) + 局部/世界平移。
     std::vector<std::string> seg(N), jpath(N);
     for (size_t i = 0; i < N; ++i)
@@ -264,7 +273,36 @@ static bool exportSkeletalUSD(const TreeMeshData& mesh, const std::string& path)
     f << "] (\n                elementSize = 4\n                interpolation = \"vertex\"\n            )\n";
     f << "            matrix4d primvars:skel:geomBindTransform = ";
     writeTransMat(f, glm::vec3(0.0f));
-    f << "\n        }\n";
+    f << "\n";
+    // 材质分段 → GeomSubset(familyName=materialBind): UE 导入后每段成独立材质槽。
+    // 单材质(subs 为空)时整块绑一个材质。均需真实 material:binding, 否则 UE 只出一个槽。
+    if (sb.subs.size() >= 2) {
+        f << "            uniform token subsetFamily:materialBind:familyType = \"partition\"\n";
+        for (size_t si = 0; si < sb.subs.size(); ++si) {
+            const auto& ps = sb.subs[si];
+            if (ps.idxCount == 0) continue;
+            // GeomSubset 索引 = 面(三角形)序号。段内索引区间 [off, off+cnt) 每 3 个一面。
+            uint32_t faceStart = ps.idxOffset / 3;
+            uint32_t faceCount = ps.idxCount / 3;
+            std::string mp = addMat("Mat_Trunk_" + std::to_string(si), ps.material.albedo);
+            f << "            def GeomSubset \"MatSlot_" << si << "\" (\n";
+            f << "                prepend apiSchemas = [\"MaterialBindingAPI\"]\n            )\n            {\n";
+            f << "                uniform token elementType = \"face\"\n";
+            f << "                uniform token familyName = \"materialBind\"\n";
+            f << "                int[] indices = [";
+            for (uint32_t k = 0; k < faceCount; ++k) { if (k) f << ", "; f << (faceStart + k); }
+            f << "]\n";
+            f << "                rel material:binding = " << mp << "\n";
+            f << "                color3f[] primvars:displayColor = [("
+              << ps.material.albedo.x << ", " << ps.material.albedo.y << ", "
+              << ps.material.albedo.z << ")] (interpolation = \"constant\")\n";
+            f << "            }\n";
+        }
+    } else {
+        std::string mp = addMat("Mat_Trunk", sb.material.albedo);
+        f << "            rel material:binding = " << mp << "\n";
+    }
+    f << "        }\n";
     f << "    }\n\n";
 
     // 3c) 散布叶 PointInstancer: NaniteAssemblySkelBindingAPI, 每实例刚性绑到所属 leafTwig 骨
@@ -342,10 +380,12 @@ static bool exportSkeletalUSD(const TreeMeshData& mesh, const std::string& path)
             std::vector<int> fc(sg.cnt / 3, 3);
             std::vector<int> fi(lp.idx.begin() + sg.off, lp.idx.begin() + sg.off + sg.cnt);
             std::string geoName = "LeafGeo_" + std::to_string(si);
+            std::string mp = addMat("Mat_Leaf" + std::to_string(pi) + "_" + std::to_string(si), sg.col);
             // 叶网格: 蒙皮到 LeafSkel 单骨, 全顶点 index 0 / weight 1(顶点数组整枝共用)
             f << "                def Mesh \"" << geoName << "\" (\n";
-            f << "                    prepend apiSchemas = [\"SkelBindingAPI\"]\n                )\n                {\n";
+            f << "                    prepend apiSchemas = [\"SkelBindingAPI\", \"MaterialBindingAPI\"]\n                )\n                {\n";
             f << "                    rel skel:skeleton = <" << protoPath << "/LeafSkel>\n";
+            f << "                    rel material:binding = " << mp << "\n";
             writeMeshBody(f, "                    ", lp.pts, lp.nrms, lp.uvs, fc, fi, sg.col);
             f << "                    int[] primvars:skel:jointIndices = [";
             for (size_t v = 0; v < lp.pts.size(); ++v) { if (v) f << ", "; f << "0"; }
@@ -359,6 +399,21 @@ static bool exportSkeletalUSD(const TreeMeshData& mesh, const std::string& path)
         f << "            }\n        }\n";
         f << "    }\n\n";
     }
+
+    // Materials: 每个 mesh 段一个 UsdPreviewSurface 空壳(仅 diffuseColor)。
+    // UE 靠这些 material:binding 生成独立材质槽; 具体贴图由用户在 UE 里指定。
+    f << "    def Scope \"Materials\"\n    {\n";
+    for (const auto& m : mats) {
+        f << "        def Material \"" << m.name << "\"\n        {\n";
+        f << "            token outputs:surface.connect = </Root/Materials/" << m.name << "/Surface.outputs:surface>\n";
+        f << "            def Shader \"Surface\"\n            {\n";
+        f << "                uniform token info:id = \"UsdPreviewSurface\"\n";
+        f << "                color3f inputs:diffuseColor = (" << m.col.x << ", " << m.col.y << ", " << m.col.z << ")\n";
+        f << "                token outputs:surface\n";
+        f << "            }\n";
+        f << "        }\n";
+    }
+    f << "    }\n";
 
     f << "}\n";
 

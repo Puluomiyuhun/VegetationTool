@@ -46,7 +46,8 @@ An open-source, node-based vegetation generation tool inspired by SpeedTree — 
 
 ### USD Export (Unreal Engine 5)
 - Exports the scattered plant as a **USD skeletal Nanite Assembly**: one prototype mesh per variant (with internal material segments), instanced via transforms, plus the trunk skeleton for UE's DynamicWind simulation groups (0 = trunk, 1 = branch, 2 = leaf-twig)
-- Companion **`wind.json`** describing the wind setup for UE's DynamicWind plugin
+- **Per-slot materials via UsdShade + GeomSubset**: each mesh segment gets a real `UsdPreviewSurface` Material and `material:binding`, so UE imports **one material slot per segment** (trunk / each leaf variant) instead of collapsing everything into one — assign the actual UE materials per slot after import
+- Companion **`wind.json`** describing the wind setup for UE's DynamicWind plugin (apply in UE via `ImportDynamicWindSkeletalDataFromFile`)
 
 ### Wind Animation (vertex world-position offset, no bones)
 - **Global sway** + **branch flutter** on the branch shader; **per-leaf motion** hashed per anchor (frequency/amplitude/phase jitter) to avoid uniform swaying
@@ -59,6 +60,7 @@ An open-source, node-based vegetation generation tool inspired by SpeedTree — 
 - **Hemisphere ambient lighting** (sky color / ground color gradient, Valve-style)
 - Per-node **material settings**: Albedo, Roughness, Metallic, AO Strength, SSS Strength
 - **PBR texture maps** per node: BaseColor (sRGB), Roughness/Metallic (R/G channels), Normal Map (tangent-space), Opacity mask with alpha cutoff
+- **Anisotropic texture filtering** (up to 16×) — keeps bark/leaf textures crisp at oblique viewing angles
 - Reinhard tonemapping + gamma 2.2
 
 ### Mesh Export
@@ -70,9 +72,11 @@ An open-source, node-based vegetation generation tool inspired by SpeedTree — 
 - Specimen mode can batch multiple seeded variants into one file (spaced along X) or one file per variant
 
 ### Viewport
-- Orbit camera (left-drag = rotate, middle-drag = pan, scroll = zoom)
+- **WASD fly camera** (Q/E = down/up, Shift = faster) plus orbit controls (left-drag = rotate, middle-drag = pan, scroll = zoom)
 - Wireframe toggle
-- MSAA anti-aliasing (Off / 2x / 4x / 8x)
+- **Skeleton overlay**: draws the imported trunk's bone chain as color-coded line segments (one color per hierarchy depth) so you can inspect the skin binding — always drawn on top of the mesh
+- **Post-process anti-aliasing**: None / **FXAA** (single-frame, sharp) / **TAA** (Halton sub-pixel jitter + depth-reprojection history + YCoCg neighborhood clamp) — tames the alpha-test edge shimmer where dense leaves overlap
+- MSAA anti-aliasing (Off / 2x / 4x / 8x), orthogonal to the post-process AA
 - Shadow-map self-shadowing
 - SpeedTree-style gradient sky background
 - Real-time regeneration on any parameter change
@@ -114,7 +118,10 @@ src/
 │   ├── leaf.vert/frag    SSS + per-leaf wind + optional texture maps
 │   ├── leaf_inst.vert    Instanced scatter-leaf preview (per-instance transform)
 │   ├── depth.vert/frag   Shadow-map depth pass
-│   └── grid.vert/frag    Reference grid
+│   ├── grid.vert/frag    Reference grid
+│   ├── bone.vert/frag    Skeleton line overlay (per-vertex color)
+│   ├── fullscreen.vert   Fullscreen-triangle pass for post-process
+│   └── fxaa/taa/present.frag  Post-process AA + resolve
 └── ui/
     ├── UIManager         Dockspace + panel orchestration
     ├── NodeEditorPanel   imgui-node-editor integration

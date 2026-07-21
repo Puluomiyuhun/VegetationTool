@@ -49,6 +49,23 @@ void ViewportPanel::render(Renderer& renderer, OrbitCamera& camera,
         if (io.MouseWheel != 0) camera.onScroll(io.MouseWheel);
     }
 
+    // WASD 直飞: 视口 hover 时 WASD 平移 + QE 升降, 无需按住右键。
+    // 速度随 distance 缩放, Shift 加速。按帧时间积分, 手感稳定。
+    if (hovered) {
+        ImGuiIO& io = ImGui::GetIO();
+        float speed = camera.distance * 1.2f * io.DeltaTime;
+        if (io.KeyShift) speed *= 3.0f;
+        float fwd = 0.0f, right = 0.0f, up = 0.0f;
+        if (ImGui::IsKeyDown(ImGuiKey_W)) fwd   += speed;
+        if (ImGui::IsKeyDown(ImGuiKey_S)) fwd   -= speed;
+        if (ImGui::IsKeyDown(ImGuiKey_D)) right += speed;
+        if (ImGui::IsKeyDown(ImGuiKey_A)) right -= speed;
+        if (ImGui::IsKeyDown(ImGuiKey_E)) up    += speed;
+        if (ImGui::IsKeyDown(ImGuiKey_Q)) up    -= speed;
+        if (fwd != 0.0f || right != 0.0f || up != 0.0f)
+            camera.flyMove(fwd, right, up);
+    }
+
     // 左键单击拾取: 按下-抬起位移很小才算点击(与拖动旋转区分)。
     // 命中模型→选中对应节点并高亮; 点击空白→取消选中。
     if (hovered && ImGui::IsMouseReleased(ImGuiMouseButton_Left)) {
@@ -79,9 +96,18 @@ void ViewportPanel::render(Renderer& renderer, OrbitCamera& camera,
                              ImGuiWindowFlags_NoDocking;
     if (ImGui::Begin("##ViewportOverlay", nullptr, flags)) {
         ImGui::Checkbox("Wireframe", &wireframe);
-        if (ImGui::Button("Reset Camera")) camera.reset();
-        // 抗锯齿 (MSAA) 采样数
-        const char* aaItems[] = {"Off", "2x", "4x", "8x"};
+        ImGui::Checkbox("Skeleton",  &renderer.showSkeleton);
+        if (ImGui::Button("Reset Camera")) { camera.reset(); renderer.resetTaaHistory(); }
+        // 后处理抗锯齿模式: None / FXAA(单帧锐利) / TAA(时域最干净), 专治叶片交融锯齿闪烁
+        const char* aaModeItems[] = {"AA: None", "AA: FXAA", "AA: TAA"};
+        int aam = (int)renderer.aaMode;
+        ImGui::SetNextItemWidth(-1.0f);
+        if (ImGui::Combo("##AAMode", &aam, aaModeItems, 3)) {
+            renderer.aaMode = (Renderer::AAMode)aam;
+            renderer.resetTaaHistory();
+        }
+        // MSAA 采样数
+        const char* aaItems[] = {"MSAA: Off", "MSAA: 2x", "MSAA: 4x", "MSAA: 8x"};
         const int   aaSamples[] = {1, 2, 4, 8};
         int cur = 0;
         for (int i = 0; i < 4; ++i) if (aaSamples[i] == fb.samples()) cur = i;

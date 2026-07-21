@@ -37,3 +37,6 @@ external/lua.tar.gz
 
 # Exported sample meshes
 samples/*.obj
+
+# ufbx probe build log
+external/ufbx/build_probe.log
