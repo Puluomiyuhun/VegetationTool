@@ -125,6 +125,11 @@ void writeNode(std::ostream& o, const TreeNode* n) {
         o << "seed "        << p.seed        << '\n';
         o << "uvTilingU "   << p.uvTilingU   << '\n';
         o << "uvTilingV "   << p.uvTilingV   << '\n';
+        o << "lengthVar "      << p.lengthVar      << '\n';
+        o << "radiusScaleVar " << p.radiusScaleVar << '\n';
+        o << "endRatioVar "    << p.endRatioVar    << '\n';
+        o << "spreadAngleVar " << p.spreadAngleVar << '\n';
+        o << "gravityVar "     << p.gravityVar     << '\n';
         writeMaterial(o, p.material);
         break;
     }
@@ -155,6 +160,11 @@ void writeNode(std::ostream& o, const TreeNode* n) {
         o << "seed "        << p.seed        << '\n';
         o << "uvTilingU "   << p.uvTilingU   << '\n';
         o << "uvTilingV "   << p.uvTilingV   << '\n';
+        o << "lengthRatioVar " << p.lengthRatioVar << '\n';
+        o << "radiusScaleVar " << p.radiusScaleVar << '\n';
+        o << "endRatioVar "    << p.endRatioVar    << '\n';
+        o << "spreadAngleVar " << p.spreadAngleVar << '\n';
+        o << "gravityVar "     << p.gravityVar     << '\n';
         writeMaterial(o, p.material);
         break;
     }
@@ -180,6 +190,11 @@ void writeNode(std::ostream& o, const TreeNode* n) {
         o << "seed "        << p.seed        << '\n';
         o << "uvTilingU "   << p.uvTilingU   << '\n';
         o << "uvTilingV "   << p.uvTilingV   << '\n';
+        o << "lengthRatioVar " << p.lengthRatioVar << '\n';
+        o << "radiusScaleVar " << p.radiusScaleVar << '\n';
+        o << "endRatioVar "    << p.endRatioVar    << '\n';
+        o << "spreadAngleVar " << p.spreadAngleVar << '\n';
+        o << "gravityVar "     << p.gravityVar     << '\n';
         writeMaterial(o, p.material);
         break;
     }
@@ -233,6 +248,11 @@ void writeNode(std::ostream& o, const TreeNode* n) {
         o << "seed "        << p.seed        << '\n';
         o << "uvTilingU "   << p.uvTilingU   << '\n';
         o << "uvTilingV "   << p.uvTilingV   << '\n';
+        o << "lengthRatioVar " << p.lengthRatioVar << '\n';
+        o << "radiusScaleVar " << p.radiusScaleVar << '\n';
+        o << "endRatioVar "    << p.endRatioVar    << '\n';
+        o << "spreadAngleVar " << p.spreadAngleVar << '\n';
+        o << "gravityVar "     << p.gravityVar     << '\n';
         writeMaterial(o, p.material);
         break;
     }
@@ -294,6 +314,42 @@ void writeNode(std::ostream& o, const TreeNode* n) {
         writeMaterial(o, p.material);
         // 脚本 base64 编码为单行(放最后)
         o << "scriptB64 " << b64encode(p.script) << '\n';
+        break;
+    }
+    case NodeType::ImportTrunk: {
+        const auto& p = static_cast<const ImportTrunkNode*>(n)->params;
+        o << "scale " << p.scale << '\n';
+        o << "posX "  << p.posX  << '\n';
+        o << "posZ "  << p.posZ  << '\n';
+        writeMaterial(o, p.material);
+        o << "fbxPath " << p.fbxPath << '\n';   // 放最后: 允许含空格路径
+        break;
+    }
+    case NodeType::ImportLeaf: {
+        const auto& p = static_cast<const ImportLeafNode*>(n)->params;
+        o << "scale " << p.scale << '\n';
+        writeMaterial(o, p.material);
+        o << "fbxPath " << p.fbxPath << '\n';
+        break;
+    }
+    case NodeType::Scatter: {
+        const auto& p = static_cast<const ScatterNode*>(n)->params;
+        o << "count "        << p.count        << '\n';
+        o << "leafScale "    << p.leafScale    << '\n';
+        o << "leafScaleVar " << p.leafScaleVar << '\n';
+        o << "regionStart "  << p.regionStart  << '\n';
+        o << "regionEnd "    << p.regionEnd    << '\n';
+        o << "spreadAngle "  << p.spreadAngle  << '\n';
+        o << "spiralStep "   << p.spiralStep   << '\n';
+        o << "tipScale "     << p.tipScale     << '\n';
+        o << "normalJitter " << p.normalJitter << '\n';
+        o << "seed "         << p.seed         << '\n';
+        writeMaterial(o, p.material);
+        o << "variantCount " << p.variants.size() << '\n';
+        for (size_t i = 0; i < p.variants.size(); ++i) {
+            o << "variant" << i << " " << p.variants[i].fbxPath << '\n';
+            o << "variantTrunkPart" << i << " " << p.variants[i].trunkPart << '\n';
+        }
         break;
     }
     }
@@ -383,6 +439,9 @@ void applyParams(TreeNode* n, const KV& kv) {
         p.seed=getI(kv,"seed",p.seed);
         p.uvTilingU=getF(kv,"uvTilingU",p.uvTilingU);
         p.uvTilingV=getF(kv,"uvTilingV",getF(kv,"uvTiling",p.uvTilingV));
+        p.lengthVar=getF(kv,"lengthVar",p.lengthVar); p.radiusScaleVar=getF(kv,"radiusScaleVar",p.radiusScaleVar);
+        p.endRatioVar=getF(kv,"endRatioVar",p.endRatioVar); p.spreadAngleVar=getF(kv,"spreadAngleVar",p.spreadAngleVar);
+        p.gravityVar=getF(kv,"gravityVar",p.gravityVar);
         readMaterial(kv, p.material); break;
     }
     case NodeType::Branch: {
@@ -403,6 +462,9 @@ void applyParams(TreeNode* n, const KV& kv) {
         p.seed=getI(kv,"seed",p.seed);
         p.uvTilingU=getF(kv,"uvTilingU",p.uvTilingU);
         p.uvTilingV=getF(kv,"uvTilingV",getF(kv,"uvTiling",p.uvTilingV));
+        p.lengthRatioVar=getF(kv,"lengthRatioVar",p.lengthRatioVar); p.radiusScaleVar=getF(kv,"radiusScaleVar",p.radiusScaleVar);
+        p.endRatioVar=getF(kv,"endRatioVar",p.endRatioVar); p.spreadAngleVar=getF(kv,"spreadAngleVar",p.spreadAngleVar);
+        p.gravityVar=getF(kv,"gravityVar",p.gravityVar);
         readMaterial(kv, p.material); break;
     }
     case NodeType::Twig: {
@@ -419,6 +481,9 @@ void applyParams(TreeNode* n, const KV& kv) {
         p.seed=getI(kv,"seed",p.seed);
         p.uvTilingU=getF(kv,"uvTilingU",p.uvTilingU);
         p.uvTilingV=getF(kv,"uvTilingV",getF(kv,"uvTiling",p.uvTilingV));
+        p.lengthRatioVar=getF(kv,"lengthRatioVar",p.lengthRatioVar); p.radiusScaleVar=getF(kv,"radiusScaleVar",p.radiusScaleVar);
+        p.endRatioVar=getF(kv,"endRatioVar",p.endRatioVar); p.spreadAngleVar=getF(kv,"spreadAngleVar",p.spreadAngleVar);
+        p.gravityVar=getF(kv,"gravityVar",p.gravityVar);
         readMaterial(kv, p.material); break;
     }
     case NodeType::LeafCluster: {
@@ -465,6 +530,9 @@ void applyParams(TreeNode* n, const KV& kv) {
         p.seed=getI(kv,"seed",p.seed);
         p.uvTilingU=getF(kv,"uvTilingU",p.uvTilingU);
         p.uvTilingV=getF(kv,"uvTilingV",getF(kv,"uvTiling",p.uvTilingV));
+        p.lengthRatioVar=getF(kv,"lengthRatioVar",p.lengthRatioVar); p.radiusScaleVar=getF(kv,"radiusScaleVar",p.radiusScaleVar);
+        p.endRatioVar=getF(kv,"endRatioVar",p.endRatioVar); p.spreadAngleVar=getF(kv,"spreadAngleVar",p.spreadAngleVar);
+        p.gravityVar=getF(kv,"gravityVar",p.gravityVar);
         readMaterial(kv, p.material); break;
     }
     case NodeType::Frond: {
@@ -530,6 +598,60 @@ void applyParams(TreeNode* n, const KV& kv) {
         // 也接受未编码的原始 script(方便 API/MCP 自动化直接写入)
         std::string raw = getS(kv, "script");
         if (!raw.empty()) p.script = raw;
+        break;
+    }
+    case NodeType::ImportTrunk: {
+        auto& p = static_cast<ImportTrunkNode*>(n)->params;
+        p.scale = getF(kv, "scale", p.scale);
+        p.posX  = getF(kv, "posX",  p.posX);
+        p.posZ  = getF(kv, "posZ",  p.posZ);
+        readMaterial(kv, p.material);
+        std::string s = getS(kv, "fbxPath");
+        if (!s.empty()) { p.fbxPath = s; p.requestReload = true; }
+        break;
+    }
+    case NodeType::ImportLeaf: {
+        auto& p = static_cast<ImportLeafNode*>(n)->params;
+        p.scale = getF(kv, "scale", p.scale);
+        readMaterial(kv, p.material);
+        std::string s = getS(kv, "fbxPath");
+        if (!s.empty()) { p.fbxPath = s; p.requestReload = true; }
+        break;
+    }
+    case NodeType::Scatter: {
+        auto& p = static_cast<ScatterNode*>(n)->params;
+        p.count        = getI(kv, "count",        p.count);
+        p.leafScale    = getF(kv, "leafScale",    p.leafScale);
+        p.leafScaleVar = getF(kv, "leafScaleVar", p.leafScaleVar);
+        p.regionStart  = getF(kv, "regionStart",  p.regionStart);
+        p.regionEnd    = getF(kv, "regionEnd",    p.regionEnd);
+        p.spreadAngle  = getF(kv, "spreadAngle",  p.spreadAngle);
+        p.spiralStep   = getF(kv, "spiralStep",   p.spiralStep);
+        p.tipScale     = getF(kv, "tipScale",     p.tipScale);
+        p.normalJitter = getF(kv, "normalJitter", p.normalJitter);
+        p.seed         = getI(kv, "seed",         p.seed);
+        readMaterial(kv, p.material);
+        p.variants.clear();
+        int vc = getI(kv, "variantCount", -1);
+        if (vc >= 0) {
+            for (int i = 0; i < vc; ++i) {
+                std::string vp = getS(kv, ("variant" + std::to_string(i)).c_str());
+                ScatterParams::Variant var;
+                var.fbxPath = vp;
+                var.trunkPart = getI(kv, ("variantTrunkPart" + std::to_string(i)).c_str(), -1);
+                if (!vp.empty()) var.requestReload = true;
+                p.variants.push_back(std::move(var));
+            }
+        } else {
+            // 旧格式兼容: 单个 fbxPath → 变体[0]
+            std::string s = getS(kv, "fbxPath");
+            if (!s.empty()) {
+                ScatterParams::Variant var;
+                var.fbxPath = s;
+                var.requestReload = true;
+                p.variants.push_back(std::move(var));
+            }
+        }
         break;
     }
     }

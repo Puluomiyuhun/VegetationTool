@@ -6,6 +6,7 @@
 #include "Framebuffer.h"
 #include "graph/NodeTypes.h"
 #include <glm/glm.hpp>
+#include <glm/gtc/quaternion.hpp>
 #include <vector>
 #include <string>
 #include <memory>
@@ -19,10 +20,47 @@ struct MeshBatch {
     std::vector<uint32_t> indices;
     MaterialParams        material;
     bool                  isLeaf = false;
+    // 实例化代理: 该 batch 是散布叶的"视口预览烘焙"(几何已在 protos 里实例化导出)。
+    // 导出 USD 时必须跳过, 否则每片叶完整几何会被重复并入 base 网格(面数/体积爆炸)。
+    bool                  instanced = false;
 };
 
 struct TreeMeshData {
     std::vector<MeshBatch> batches;
+    // 实例化叶原型(FBX 散布用): 一份原型网格 + 一组每实例 transform。
+    // 视口渲染时烘成普通 batch; 导出 USD 时成为 PointInstancer(引擎里只存 1 份原型, 省内存)。
+    // bone: 该实例刚性绑定的骨索引(骨骼 Nanite Assembly 用; -1=无骨骼/不绑定)。
+    struct ProtoInstance { glm::vec3 pos; glm::quat rot; glm::vec3 scale; int bone = -1; };
+    // 原型内的材质分段: idx 的一段连续区间用一种材质。一个实例枝可含"枝干材质段 + 叶子材质段",
+    // 但整枝共用一份实例 transform(subs 只切几何/材质, 不切实例)。
+    struct ProtoSub { uint32_t idxOffset = 0; uint32_t idxCount = 0; MaterialParams material; };
+    struct InstancedProto {
+        // 原型网格(局部空间, Y-up 米制): 三角化顶点(pos/normal/uv) + 索引。
+        std::vector<glm::vec3> pts;
+        std::vector<glm::vec3> nrms;
+        std::vector<glm::vec2> uvs;
+        std::vector<uint32_t>  idx;
+        MaterialParams         material;   // 兼容/主材质(= subs[0].material)
+        std::vector<ProtoSub>  subs;       // 按材质分段(≥1); 每段一个 draw call, 共用实例
+        std::vector<ProtoInstance> instances;
+    };
+    std::vector<InstancedProto> protos;
+    // ---- 骨骼 Nanite Assembly 导出数据(仅当散布用的枝干带骨架时填充; 无骨骼则留空, 走 staticMesh 导出) ----
+    // 一根骨(世界空间 rest 位姿): 位置 + 父索引 + 名字 + 仿真组(0=树干,1=枝,2=细枝叶)。
+    struct SkelBone { glm::vec3 pos; int parent; std::string name; int simGroup; };
+    struct SkinBase {
+        // 树干 base 网格(世界空间, Y-up 米制): pos/normal/uv + 每顶点最多 4 骨蒙皮(索引/权重)。
+        std::vector<glm::vec3>  pts;
+        std::vector<glm::vec3>  nrms;
+        std::vector<glm::vec2>  uvs;
+        std::vector<uint32_t>   idx;
+        std::vector<glm::ivec4> boneIdx;   // 骨索引, 空槽 = -1
+        std::vector<glm::vec4>  boneWt;    // 权重(归一)
+        MaterialParams          material;
+    };
+    std::vector<SkelBone> skeleton;   // 空 = 无骨架(走 staticMesh 导出)
+    SkinBase              skinBase;   // 树干蒙皮 base(skeleton 非空时有效)
+    bool hasSkeleton() const { return !skeleton.empty(); }
     // 高亮几何(pos(3)+normal(3), 6 floats/顶点): 选中节点"自身"的三角网,
     // 用于视口描边(沿法线外扩 + 模板缓冲勾勒轮廓)。
     std::vector<float>    hlVerts;
@@ -30,7 +68,7 @@ struct TreeMeshData {
     // 拾取三角形: 每个三角形记录三个世界坐标顶点 + 所属节点 id, 供鼠标射线拾取。
     struct PickTri { glm::vec3 a, b, c; uint32_t node; };
     std::vector<PickTri>  pickTris;
-    void clear() { batches.clear(); hlVerts.clear(); hlIdx.clear(); pickTris.clear(); }
+    void clear() { batches.clear(); protos.clear(); hlVerts.clear(); hlIdx.clear(); pickTris.clear(); skeleton.clear(); skinBase = {}; }
 };
 
 struct LightingParams {
@@ -100,13 +138,35 @@ private:
         std::shared_ptr<Texture> texOpacity;     // unit 3 — opacity mask(R)（叶片alpha剔除）
     };
 
+    // 实例化叶批次: 一份原型网格(VAO 内含 proto VBO + EBO + 每实例 VBO), 用 glDrawElementsInstanced
+    // 一次画完所有实例。相比逐顶点烘焙, CPU 生成量与 GPU 上传量都降到 (1份原型 + 实例数组)。
+    // 每实例数据布局(10 float): pos(3) + rot四元数(4) + scale(3)。
+    struct GpuInstancedBatch {
+        GLuint vao = 0, vboProto = 0, ebo = 0, vboInst = 0;
+        int    instanceCount = 0;
+        // 每材质段一个 draw call(共用同一 VAO/实例 VBO): 索引偏移/数量 + 材质 + 贴图。
+        struct Sub {
+            int indexOffset = 0;   // 以索引个数计
+            int indexCount  = 0;
+            MaterialParams material;
+            std::shared_ptr<Texture> texBaseColor;
+            std::shared_ptr<Texture> texRoughness;
+            std::shared_ptr<Texture> texNormal;
+            std::shared_ptr<Texture> texOpacity;
+        };
+        std::vector<Sub> subs;
+        void destroy();
+    };
+
     std::vector<GpuBatch> m_batches;
+    std::vector<GpuInstancedBatch> m_instBatches;   // 散布叶实例化批次
     // 贴图缓存：路径(+sRGB标志) → 已加载纹理。重建网格时命中缓存直接复用, 不再重复解码。
     std::unordered_map<std::string, std::shared_ptr<Texture>> m_texCache;
     std::shared_ptr<Texture> getTexture(const std::string& path, bool sRGB);
 
     Shader m_branchShader;
     Shader m_leafShader;
+    Shader m_leafInstShader;   // 散布叶实例化渲染
     Shader m_gridShader;
     Shader m_skyShader;
     Shader m_depthShader;   // 阴影深度 pass

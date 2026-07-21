@@ -111,3 +111,39 @@ public:
     std::unique_ptr<TreeNode> clone() const override { return std::make_unique<CustomNode>(*this); }
     void copyParamsFrom(const TreeNode* o) override { if (auto* p = dynamic_cast<const CustomNode*>(o)) params = p->params; }
 };
+
+// ---- ImportTrunk（导入带骨骼枝干 FBX，作为一株的根） ----
+class ImportTrunkNode : public TreeNode {
+public:
+    ImportTrunkParams params;
+    ImportTrunkNode();
+    NodeType    getType()  const override { return NodeType::ImportTrunk; }
+    const char* getLabel() const override { return "Import Trunk"; }
+    bool        drawProperties() override;
+    std::unique_ptr<TreeNode> clone() const override { return std::make_unique<ImportTrunkNode>(*this); }
+    void copyParamsFrom(const TreeNode* o) override { if (auto* p = dynamic_cast<const ImportTrunkNode*>(o)) params = p->params; }
+};
+
+// ---- ImportLeaf（导入枝叶单体 FBX，散布原型/预览） ----
+class ImportLeafNode : public TreeNode {
+public:
+    ImportLeafParams params;
+    ImportLeafNode();
+    NodeType    getType()  const override { return NodeType::ImportLeaf; }
+    const char* getLabel() const override { return "Import Leaf"; }
+    bool        drawProperties() override;
+    std::unique_ptr<TreeNode> clone() const override { return std::make_unique<ImportLeafNode>(*this); }
+    void copyParamsFrom(const TreeNode* o) override { if (auto* p = dynamic_cast<const ImportLeafNode*>(o)) params = p->params; }
+};
+
+// ---- Scatter（沿父级骨骼链撒叶，输出实例化叶原型） ----
+class ScatterNode : public TreeNode {
+public:
+    ScatterParams params;
+    ScatterNode();
+    NodeType    getType()  const override { return NodeType::Scatter; }
+    const char* getLabel() const override { return "Scatter"; }
+    bool        drawProperties() override;
+    std::unique_ptr<TreeNode> clone() const override { return std::make_unique<ScatterNode>(*this); }
+    void copyParamsFrom(const TreeNode* o) override { if (auto* p = dynamic_cast<const ScatterNode*>(o)) params = p->params; }
+};

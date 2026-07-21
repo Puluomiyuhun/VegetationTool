@@ -15,6 +15,9 @@ static std::unique_ptr<TreeNode> makeNode(NodeType type) {
         case NodeType::Frond:       return std::make_unique<FrondNode>();
         case NodeType::Export:      return std::make_unique<ExportNode>();
         case NodeType::Custom:      return std::make_unique<CustomNode>();
+        case NodeType::ImportTrunk: return std::make_unique<ImportTrunkNode>();
+        case NodeType::ImportLeaf:  return std::make_unique<ImportLeafNode>();
+        case NodeType::Scatter:     return std::make_unique<ScatterNode>();
     }
     return nullptr;
 }

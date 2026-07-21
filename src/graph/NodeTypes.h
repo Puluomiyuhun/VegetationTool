@@ -3,8 +3,14 @@
 #include <cstdint>
 #include <string>
 #include <vector>
+#include <memory>
 
-enum class NodeType { Trunk, Roots, Branch, Twig, LeafCluster, Spine, Frond, Export, Custom };
+// io/MeshImport.h 里定义; 这里只前向声明, 供导入节点缓存已加载网格(避免头文件循环包含)。
+struct ImportedMesh;
+
+// 枚举序列化为 int, 末尾追加新类型以保持旧工程兼容(切勿在中间插入)。
+enum class NodeType { Trunk, Roots, Branch, Twig, LeafCluster, Spine, Frond, Export, Custom,
+                      ImportTrunk, ImportLeaf, Scatter };
 
 // Branch 分布模式(对标 SpeedTree Generation Mode)。目前仅实现 Classic(=现有分布行为)，
 // 其余模式先占位保留枚举与序号, 待后续逐个实现。
@@ -86,6 +92,12 @@ struct BranchParams {
     int   seed         = 2;
     float uvTilingU    = 1.0f;   // 树皮纹理沿枝条周向的平铺次数
     float uvTilingV    = 2.0f;   // 树皮纹理沿枝条长度的平铺次数
+    // ---- Variance(每根实例随机偏移, 绝对±范围; 0=关闭, 与该参数同单位) ----
+    float lengthRatioVar = 0.0f; // 长度比例抖动 ±
+    float radiusScaleVar = 0.0f; // start半径比例抖动 ±
+    float endRatioVar    = 0.0f; // 末端锥度抖动 ±
+    float spreadAngleVar = 0.0f; // 张开角抖动 ±(度)
+    float gravityVar     = 0.0f; // 重力下垂抖动 ±
     MaterialParams material = {{0.32f,0.18f,0.08f}, 0.88f, 0.0f, 0.55f, 0.0f};
 };
 
@@ -110,6 +122,12 @@ struct TwigParams {
     int   seed         = 3;
     float uvTilingU    = 1.0f;   // 树皮纹理沿细枝周向的平铺次数
     float uvTilingV    = 1.0f;   // 树皮纹理沿细枝长度的平铺次数
+    // ---- Variance(每根实例随机偏移, 绝对±范围; 0=关闭) ----
+    float lengthRatioVar = 0.0f;
+    float radiusScaleVar = 0.0f;
+    float endRatioVar    = 0.0f;
+    float spreadAngleVar = 0.0f;
+    float gravityVar     = 0.0f;
     MaterialParams material = {{0.28f,0.16f,0.07f}, 0.9f, 0.0f, 0.6f, 0.0f};
 };
 
@@ -158,6 +176,12 @@ struct RootsParams {
     int   seed        = 5;
     float uvTilingU   = 1.0f;
     float uvTilingV   = 3.0f;
+    // ---- Variance(每根实例随机偏移, 绝对±范围; 0=关闭) ----
+    float lengthVar      = 0.0f; // 根长度抖动 ±(世界单位)
+    float radiusScaleVar = 0.0f;
+    float endRatioVar    = 0.0f;
+    float spreadAngleVar = 0.0f; // 张开角抖动 ±(度)
+    float gravityVar     = 0.0f;
     MaterialParams material = {{0.30f,0.19f,0.10f}, 0.9f, 0.0f, 0.55f, 0.0f};
 };
 
@@ -182,6 +206,12 @@ struct SpineParams {
     int   seed         = 6;
     float uvTilingU    = 1.0f;
     float uvTilingV    = 1.0f;
+    // ---- Variance(每根实例随机偏移, 绝对±范围; 0=关闭) ----
+    float lengthRatioVar = 0.0f;
+    float radiusScaleVar = 0.0f;
+    float endRatioVar    = 0.0f;
+    float spreadAngleVar = 0.0f; // 抬起角抖动 ±(度)
+    float gravityVar     = 0.0f;
     MaterialParams material = {{0.22f,0.42f,0.10f}, 0.7f, 0.0f, 0.45f, 0.2f};
 };
 
@@ -218,7 +248,7 @@ struct FrondParams {
 //    竖直向上标本(根部在原点, 主枝沿 +Y 挺立), 供 UE5.8 PCG 程序化种树用作枝叶标本。
 struct ExportParams {
     std::string path = "tree_export.obj";  // 导出文件路径
-    int         format = 0;                // 导出格式: 0=OBJ(+mtl); 1=FBX(ASCII)
+    int         format = 0;                // 导出格式: 0=OBJ(+mtl); 1=FBX(ASCII); 2=USD(Nanite 程序集)
     // 导出模式: 0=当前节点及下游(竖直标本); 1=整株(追溯到根 Trunk); 2=当前节点及上游(祖先链)
     int         exportMode = 0;
     int         specimenCount = 1;         // 标本模式: 用不同随机种子生成的变体数量
@@ -271,4 +301,65 @@ struct CustomParams {
     MaterialParams material = {{0.32f,0.18f,0.08f}, 0.88f, 0.0f, 0.55f, 0.0f};
 
     mutable std::string lastError;       // 瞬时: 最近一次脚本执行的错误信息(空=成功), 仅UI显示用
+};
+
+// ---- FBX 导入 / 散布(SpeedTree → SlowTree → UE USD 桥接) ----
+//
+// ImportTrunk: 作为一株的"根"节点(等价 Trunk 但几何来自导入 FBX)。加载带骨骼的枝干网格,
+//   原样渲染并把骨骼链换算成 rings 供下游 Scatter 沿其撒叶。
+// ImportLeaf:  加载一小片"枝叶单体"网格作为散布原型(独立预览用, 也可被 Scatter 引用)。
+// Scatter:     ImportTrunk 的子节点。沿父级 rings(骨骼链)撒 N 个叶实例, 每实例记录
+//   (position, orientation, scale), 引用一份叶原型网格。导出 USD 时成为 PointInstancer(省内存)。
+//
+// 加载态: fbxPath 变更或 requestReload 置位时, Application/Generator 调 MeshImport::loadFBX
+//   填充 cached(shared_ptr<ImportedMesh>); 生成/渲染/导出复用同一份, 不重复解码磁盘。
+
+struct ImportTrunkParams {
+    std::string fbxPath;                 // 枝干 FBX 绝对路径(空=未导入)
+    float       scale       = 1.0f;      // 整体缩放(FBX 单位→场景单位)
+    float       posX        = 0.0f;      // 场景摆放 X(多株并存)
+    float       posZ        = 0.0f;      // 场景摆放 Z
+    MaterialParams material = {{0.38f,0.22f,0.10f}, 0.85f, 0.0f, 0.5f, 0.0f};
+
+    // 运行态缓存(不序列化): 已加载网格 + 加载状态。requestReload 由 UI 置位。
+    mutable std::shared_ptr<ImportedMesh> cached;
+    mutable std::string loadError;       // 空=成功
+    mutable bool        requestReload = false;
+};
+
+struct ImportLeafParams {
+    std::string fbxPath;                 // 叶单体 FBX 绝对路径(空=未导入)
+    float       scale       = 1.0f;      // 整体缩放
+    MaterialParams material = {{0.15f,0.48f,0.06f}, 0.75f, 0.0f, 0.4f, 0.45f};
+
+    mutable std::shared_ptr<ImportedMesh> cached;
+    mutable std::string loadError;
+    mutable bool        requestReload = false;
+};
+
+struct ScatterParams {
+    // 叶原型变体: 可导入多个"实例枝"变体, 散布时每根末端细枝均匀随机选一个变体。
+    // 各变体共用外层 material。变体列表为空或全部加载失败时不撒叶。
+    struct Variant {
+        std::string fbxPath;                       // 该变体 FBX 绝对路径
+        // 枝干子网格索引: 实例枝含 2 个材质时, 把某个 part 判为"枝干"(复用父级 Trunk 材质),
+        // 其余 part 作叶子(用 FBX 自带材质)。-1 = 全部当叶子(单材质/无枝干)。
+        int         trunkPart = -1;
+        mutable std::shared_ptr<ImportedMesh> cached;
+        mutable std::string loadError;
+        mutable bool        requestReload = false;
+    };
+    std::vector<Variant> variants;       // 叶原型变体(散布用的枝叶单体, 均匀随机选取)
+
+    int         count       = 3;         // 每根末端细枝上撒的叶实例数
+    float       leafScale    = 1.0f;     // 每片叶缩放(相对原型)
+    float       leafScaleVar = 0.0f;     // 缩放抖动 ±
+    float       regionStart  = 0.1f;     // 沿细枝[start,end]区间撒叶
+    float       regionEnd     = 1.0f;
+    float       spreadAngle   = 55.0f;   // 叶朝向相对枝干径向的抬起抖动上限(度)
+    float       normalJitter  = 0.4f;    // 朝向随机抖动强度
+    float       spiralStep    = 137.5f;  // 沿枝推进每片叶方位角步进(度), 螺旋式散布生长
+    float       tipScale      = 1.0f;    // 近枝尖叶相对缩放(近根=1, 近尖=tipScale; <1 越尖越小)
+    int         seed          = 100;
+    MaterialParams material = {{0.15f,0.48f,0.06f}, 0.75f, 0.0f, 0.4f, 0.45f};
 };

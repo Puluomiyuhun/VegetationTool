@@ -11,7 +11,7 @@ An open-source, node-based vegetation generation tool inspired by SpeedTree — 
 ## ✨ Features
 
 ### Node Graph Editor
-- **8 node types**: Trunk, Roots, Branch, Twig, LeafCluster, **Spine → Frond** (ferns), and **Export**
+- **Node types**: Trunk, Roots, Branch, Twig, LeafCluster, **Spine → Frond** (ferns), **Custom (Lua)**, **ImportTrunk / ImportLeaf** (FBX), **Scatter**, and **Export**
 - Drag-and-drop node connections (imgui-node-editor)
 - Right-click context menu to add nodes
 - One-click **Add Child Node** buttons in the Properties panel
@@ -34,6 +34,19 @@ An open-source, node-based vegetation generation tool inspired by SpeedTree — 
 - **Manual mode**: click along the silhouette edge to place boundary points (drag to move, right-click to delete, scroll to zoom, middle-drag to pan) — ideal for atlases with many leaves on one mask
 - **Auto mode**: alpha-threshold marching-squares tracing → largest contour → Douglas-Peucker simplification → ear-clip triangulation
 - Boundary ring is ear-clipped into a triangle mesh mapped onto every leaf card; saved with the project
+
+### FBX Import & Leaf Scattering (SpeedTree → Nanite Assembly pipeline)
+- **ImportTrunk** node: load a boned SpeedTree trunk FBX (ufbx parser); the skeleton, per-bone segment classification (trunk / branch / leaf-twig), and skin weights are all preserved
+- **ImportLeaf** node: load a leaf singleton FBX to use as the scatter prototype
+- **Scatter** node: places leaf-singleton instances on the trunk's **leaf-twig** bones as reusable prototypes (PCG-style), driven by count, region, spread angle, tip scale, per-instance scale variance, and seed
+- **Mesh-based grafting**: leaf bases attach to the *actual branch-mesh surface vertices* dominated by each leaf-twig bone (with the vertex normal as the outward direction), so leaves sit flush on the real bark instead of floating on the bone axis — correct even for non-uniform branch thickness
+- **Multiple leaf-prototype variants** per Scatter node, randomly chosen per twig for canopy variety
+- **Multi-material instances**: an instance branch can carry two materials — one submesh reuses the upstream Trunk material (manually assigned via a per-variant "trunk part" selector), the rest use the FBX's own leaf material
+- GPU-instanced viewport preview (`glDrawElementsInstanced`) — hundreds of thousands of leaves without per-frame mesh rebuilds
+
+### USD Export (Unreal Engine 5)
+- Exports the scattered plant as a **USD skeletal Nanite Assembly**: one prototype mesh per variant (with internal material segments), instanced via transforms, plus the trunk skeleton for UE's DynamicWind simulation groups (0 = trunk, 1 = branch, 2 = leaf-twig)
+- Companion **`wind.json`** describing the wind setup for UE's DynamicWind plugin
 
 ### Wind Animation (vertex world-position offset, no bones)
 - **Global sway** + **branch flutter** on the branch shader; **per-leaf motion** hashed per anchor (frequency/amplitude/phase jitter) to avoid uniform swaying
@@ -80,11 +93,15 @@ src/
 ├── app/            Application loop (GLFW + OpenGL init)
 ├── generator/
 │   ├── CylinderSegment   Bezier & kinked ring generation, PTF transport
-│   └── TreeGenerator     Node-graph traversal → MeshBatch output
+│   └── TreeGenerator     Node-graph traversal → MeshBatch + instanced protos
 ├── graph/
 │   ├── NodeTypes         MaterialParams, per-node parameter structs
 │   ├── NodeGraph         Node/Pin/Link management, addChildNode()
 │   └── Nodes             Per-type drawProperties() UI
+├── io/
+│   ├── MeshImport        ufbx FBX loader → skinned mesh + skeleton + material parts
+│   ├── ProjectIO         .vtree read/write, OBJ/FBX export
+│   └── UsdExport         USD skeletal Nanite Assembly + wind.json export
 ├── renderer/
 │   ├── Renderer          MeshBatch upload, draw-call dispatch
 │   ├── Mesh              VAO/VBO/EBO wrapper
@@ -95,6 +112,7 @@ src/
 ├── shaders/
 │   ├── branch.vert/frag  PBR + wind sway + optional texture maps
 │   ├── leaf.vert/frag    SSS + per-leaf wind + optional texture maps
+│   ├── leaf_inst.vert    Instanced scatter-leaf preview (per-instance transform)
 │   ├── depth.vert/frag   Shadow-map depth pass
 │   └── grid.vert/frag    Reference grid
 └── ui/
@@ -140,6 +158,7 @@ E:\VegetationTool\build\Release\SlowTree.exe
 | imgui (docking) | 1.92 | UI framework |
 | stb | 2024-07 | Image loading |
 | imgui-node-editor | bundled in `external/` | Node graph UI |
+| ufbx | bundled in `external/` | FBX import/export parser |
 
 ---
 
@@ -178,8 +197,10 @@ Click the **×** button to clear a texture and revert to the uniform color value
 ## 🗺 Roadmap
 
 - [x] Mesh export (OBJ **+ .mtl materials**, **FBX** with materials & textures) — *glTF planned*
+- [x] **FBX import** (boned SpeedTree trunk + leaf singleton, via ufbx)
+- [x] **USD export** as skeletal Nanite Assembly + `wind.json` (Unreal Engine 5)
+- [x] **Leaf scattering** onto imported trunk mesh (Nanite Assembly instancing, mesh-based grafting)
 - [ ] LOD generation
-- [ ] Skeletal animation support
 - [ ] Collision mesh generation
 - [x] Wind animation (vertex world-position offset)
 - [x] Leaf mesh cutout editor (SpeedTree-style silhouette → mesh card)
@@ -203,3 +224,4 @@ MIT License — see [LICENSE](LICENSE) for details.
 - [GLFW](https://www.glfw.org/) — windowing
 - [GLM](https://github.com/g-truc/glm) — mathematics
 - [stb_image](https://github.com/nothings/stb) — image loading
+- [ufbx](https://github.com/ufbx/ufbx) — FBX import/export parser

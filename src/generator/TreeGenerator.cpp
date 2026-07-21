@@ -2,12 +2,21 @@
 #include "CylinderSegment.h"
 #include "LuaEngine.h"
 #include "graph/Nodes.h"
+#include "io/MeshImport.h"
 #include <glm/gtc/constants.hpp>
+#include <glm/gtc/quaternion.hpp>
 #include <cmath>
 #include <random>
 #include <algorithm>
+#include <unordered_map>
 
 static constexpr int MAX_DEPTH = 6;
+
+// 每根实例的 variance 采样: 在 [-v, +v] 均匀取偏移(v<=0 时返回0, 完全等同关闭)。
+static inline float varyBy(std::mt19937& rng, float v) {
+    if (v <= 0.0f) return 0.0f;
+    return std::uniform_real_distribution<float>(-v, v)(rng);
+}
 
 // ---- 工具 ----
 glm::vec3 TreeGenerator::perpendicular(glm::vec3 dir) {
@@ -45,7 +54,7 @@ void TreeGenerator::sampleRings(const std::vector<BranchRing>& rings, float t,
     outRadius = glm::mix(rings[lo].radius, rings[hi].radius, frac);
 }
 
-MeshBatch& TreeGenerator::getBatch(const MaterialParams& mat, bool isLeaf) {
+MeshBatch& TreeGenerator::getBatch(const MaterialParams& mat, bool isLeaf, bool instanced) {
     // 归并键必须涵盖全部影响渲染的材质字段：仅比 albedo 会把 albedo 相同但
     // roughness/metallic/贴图等不同的材质错误合并，导致调一个节点的粗糙度
     // 影响到另一节点(共用了同一 batch 的材质)。
@@ -62,12 +71,13 @@ MeshBatch& TreeGenerator::getBatch(const MaterialParams& mat, bool isLeaf) {
             && a.opacityTex   == b.opacityTex;
     };
     for (auto& b : m_out->batches) {
-        if (b.isLeaf == isLeaf && sameMaterial(b.material, mat))
+        if (b.isLeaf == isLeaf && b.instanced == instanced && sameMaterial(b.material, mat))
             return b;
     }
     MeshBatch nb;
-    nb.material = mat;
-    nb.isLeaf   = isLeaf;
+    nb.material  = mat;
+    nb.isLeaf    = isLeaf;
+    nb.instanced = instanced;
     m_out->batches.push_back(std::move(nb));
     return m_out->batches.back();
 }
@@ -231,16 +241,31 @@ TreeMeshData TreeGenerator::generate(NodeGraph& graph, NodeId hlNode) {
     // 一个工程内可有多棵植被：每个"无输入连线的 Trunk"都是一株独立植物，
     // 各自按自身 posX/posZ 摆放到场景中。
     for (const auto& [id, node] : graph.nodes()) {
-        if (node->getType() != NodeType::Trunk) continue;
-        // 只处理根 Trunk（输入未连接的），作为独立植株标志
-        bool hasInput = false;
-        for (const auto& pin : node->inputPins)
-            if (graph.linkFromPin(pin.id) != INVALID_LINK) { hasInput = true; break; }
-        if (hasInput) continue;
+        if (node->getType() == NodeType::Trunk) {
+            // 只处理根 Trunk（输入未连接的），作为独立植株标志
+            bool hasInput = false;
+            for (const auto& pin : node->inputPins)
+                if (graph.linkFromPin(pin.id) != INVALID_LINK) { hasInput = true; break; }
+            if (hasInput) continue;
 
-        const auto& tp = static_cast<const TrunkNode*>(node.get())->params;
-        glm::vec3 base = {tp.posX, 0.0f, tp.posZ};
-        processNode(graph, node.get(), nullptr, base, {0,1,0}, 1.0f, 0);
+            const auto& tp = static_cast<const TrunkNode*>(node.get())->params;
+            glm::vec3 base = {tp.posX, 0.0f, tp.posZ};
+            processNode(graph, node.get(), nullptr, base, {0,1,0}, 1.0f, 0);
+        } else if (node->getType() == NodeType::ImportTrunk) {
+            // 导入枝干同样是一株独立植物的根(输入未连接)
+            bool hasInput = false;
+            for (const auto& pin : node->inputPins)
+                if (graph.linkFromPin(pin.id) != INVALID_LINK) { hasInput = true; break; }
+            if (hasInput) continue;
+            processNode(graph, node.get(), nullptr, {0,0,0}, {0,1,0}, 1.0f, 0);
+        } else if (node->getType() == NodeType::ImportLeaf) {
+            // 独立预览: 无输入连接时在原点渲染叶单体
+            bool hasInput = false;
+            for (const auto& pin : node->inputPins)
+                if (graph.linkFromPin(pin.id) != INVALID_LINK) { hasInput = true; break; }
+            if (hasInput) continue;
+            processNode(graph, node.get(), nullptr, {0,0,0}, {0,1,0}, 1.0f, 0);
+        }
     }
     m_out = nullptr;
     return data;
@@ -256,6 +281,8 @@ TreeMeshData TreeGenerator::generateSubtree(NodeGraph& graph, NodeId trunkId) {
         const auto& tp = static_cast<const TrunkNode*>(node)->params;
         glm::vec3 base = {tp.posX, 0.0f, tp.posZ};
         processNode(graph, node, nullptr, base, {0,1,0}, 1.0f, 0);
+    } else if (node && node->getType() == NodeType::ImportTrunk) {
+        processNode(graph, node, nullptr, {0,0,0}, {0,1,0}, 1.0f, 0);
     }
     m_out = nullptr;
     return data;
@@ -421,6 +448,9 @@ void TreeGenerator::processNode(
         case NodeType::Frond:       m_windW = 0.7f;  break;
         case NodeType::Export:      m_windW = 0.0f;  break;  // 导出节点无几何
         case NodeType::Custom:      m_windW = 0.28f; break;  // 同 Branch
+        case NodeType::ImportTrunk: m_windW = 0.05f; break;  // 同 Trunk
+        case NodeType::ImportLeaf:  m_windW = 1.0f;  break;  // 同叶
+        case NodeType::Scatter:     m_windW = 1.0f;  break;  // 散布叶
     }
     // id 哈希 → [0, 2π) 相位
     m_windPhase = (float)((node->id * 2654435761u) % 62832u) / 10000.0f;
@@ -471,6 +501,37 @@ void TreeGenerator::processNode(
         if (parentRings && !parentRings->empty())
             buildCustom(static_cast<const CustomNode*>(node),
                         graph, *parentRings, parentLen, depth);
+        break;
+    case NodeType::ImportTrunk: {
+        const auto* itn = static_cast<const ImportTrunkNode*>(node);
+        glm::vec3 off = origin + glm::vec3(itn->params.posX, 0.0f, itn->params.posZ);
+        auto rings = buildImportTrunk(itn, off);
+        float len = 1.0f;
+        if (rings.size() >= 2)
+            len = glm::length(rings.back().center - rings.front().center);
+        // 供下游 Scatter 沿骨骼末端细枝散布: 记录已加载骨架 + 该枝干的缩放/平移。
+        const ImportedMesh* prevTrunk = m_scatterTrunk;
+        float prevTrunkScale = m_scatterTrunkScale;
+        glm::vec3 prevTrunkOffset = m_scatterTrunkOffset;
+        MaterialParams prevTrunkMat = m_scatterTrunkMaterial;
+        m_scatterTrunk = (itn->params.cached && itn->params.cached->hasSkeleton())
+                       ? itn->params.cached.get() : nullptr;
+        m_scatterTrunkScale = itn->params.scale;
+        m_scatterTrunkOffset = off;
+        m_scatterTrunkMaterial = itn->params.material;
+        for (auto* child : graph.childrenOf(node->id))
+            processNode(graph, child, &rings, off, {0,1,0}, len, depth+1);
+        m_scatterTrunk = prevTrunk;
+        m_scatterTrunkScale = prevTrunkScale;
+        m_scatterTrunkOffset = prevTrunkOffset;
+        m_scatterTrunkMaterial = prevTrunkMat;
+        break;
+    }
+    case NodeType::ImportLeaf:
+        buildImportLeaf(static_cast<const ImportLeafNode*>(node), origin);
+        break;
+    case NodeType::Scatter:
+        buildScatter(static_cast<const ScatterNode*>(node), parentRings, origin, dir);
         break;
     }
 
@@ -551,7 +612,6 @@ void TreeGenerator::buildBranches(
     float parentLen, int depth)
 {
     const auto& p = node->params;
-    float branchLen = parentLen * p.lengthRatio;
     std::mt19937 rng(p.seed + depth * 100 + m_specimenSeedOffset);
     std::uniform_real_distribution<float> jitter(-5.0f, 5.0f);
     std::uniform_real_distribution<float> jitterLen(0.85f, 1.15f);
@@ -626,18 +686,24 @@ void TreeGenerator::buildBranches(
         }
 
         float az = at.az;
-        float el = p.spreadAngle + jitter(rng);
+        float el = p.spreadAngle + varyBy(rng, p.spreadAngleVar) + jitter(rng);
 
         // 以attachDir为轴向、attachRight为参考，计算分支方向
         glm::vec3 branchDir = rotateAroundAxis(attachDir, attachRight, el);
         branchDir = rotateAroundAxis(branchDir, attachDir, az);
 
-        float thisLen = branchLen * jitterLen(rng);
+        // 每根实例的长度/半径/锥度 variance(默认0=关闭, 行为不变)
+        float instLenRatio = std::max(0.02f, p.lengthRatio + varyBy(rng, p.lengthRatioVar));
+        float instRadScale = std::max(0.01f, p.radiusScale + varyBy(rng, p.radiusScaleVar));
+        float instEndRatio = std::max(0.01f, p.endRatio    + varyBy(rng, p.endRatioVar));
+        float instGravity  = p.gravity + varyBy(rng, p.gravityVar);  // 不clamp: 保留旧数据>1/负值语义
+
+        float thisLen = parentLen * instLenRatio * jitterLen(rng);
         // Size Falloff: 沿父级向上(attachT 越大)长度线性衰减, 让树冠上部枝条更短
         thisLen *= std::max(0.05f, 1.0f - p.sizeFalloff * attachT);
         // start半径贴合父级附着点，end按自身锥度收缩
-        float startR = attachRadius * p.radiusScale;
-        float endR   = startR * p.endRatio;
+        float startR = attachRadius * instRadScale;
+        float endR   = startR * instEndRatio;
 
         // 枝条从父级“表面”发出（轴心 + 径向×父半径），而非从轴心穿出
         glm::vec3 radial = branchDir - attachDir * glm::dot(branchDir, attachDir);
@@ -649,7 +715,7 @@ void TreeGenerator::buildBranches(
             surfacePos, branchDir, thisLen,
             startR, endR,
             p.lengthSegs, p.noiseAmount, p.noiseFreq,
-            p.gnarl, p.taperPow, p.gravity, rng,
+            p.gnarl, p.taperPow, instGravity, rng,
             p.jointCount, p.jointBulge);
 
         auto& batch = getBatch(p.material, false);
@@ -796,7 +862,6 @@ void TreeGenerator::buildTwig(
     float parentLen, int depth)
 {
     const auto& p = node->params;
-    float twigLen = parentLen * p.lengthRatio;
     std::mt19937 rng(p.seed + depth * 77 + m_specimenSeedOffset);
     std::uniform_real_distribution<float> jitter(-8.0f, 8.0f);
     std::uniform_real_distribution<float> jitterLen(0.8f, 1.2f);
@@ -835,7 +900,7 @@ void TreeGenerator::buildTwig(
         float az = p.alternating
                    ? (i % 2 == 0 ? baseAz : baseAz + 180.0f) + jitter(rng)
                    : i * p.rotateOffset + jitter(rng);
-        float el = p.spreadAngle + jitter(rng);
+        float el = p.spreadAngle + varyBy(rng, p.spreadAngleVar) + jitter(rng);
         if (p.alternating) baseAz += p.rotateOffset;
 
         float t = attachDist(rng);
@@ -853,10 +918,16 @@ void TreeGenerator::buildTwig(
         glm::vec3 twigDir = rotateAroundAxis(attachDir, attachRight, el);
         twigDir = rotateAroundAxis(twigDir, attachDir, az);
 
-        float thisLen = twigLen * jitterLen(rng);
+        // 每根实例的长度/半径/锥度/重力 variance(默认0=关闭)
+        float instLenRatio = std::max(0.02f, p.lengthRatio + varyBy(rng, p.lengthRatioVar));
+        float instRadScale = std::max(0.01f, p.radiusScale + varyBy(rng, p.radiusScaleVar));
+        float instEndRatio = std::max(0.01f, p.endRatio    + varyBy(rng, p.endRatioVar));
+        float instGravity  = p.gravity + varyBy(rng, p.gravityVar);  // 不clamp: 保留旧数据>1/负值语义
+
+        float thisLen = parentLen * instLenRatio * jitterLen(rng);
         // start半径贴合父级附着点，end按自身锥度收缩
-        float startR = attachRadius * p.radiusScale;
-        float endR   = startR * p.endRatio;
+        float startR = attachRadius * instRadScale;
+        float endR   = startR * instEndRatio;
 
         // 细枝从父级“表面”发出，而非从轴心穿出
         glm::vec3 radial = twigDir - attachDir * glm::dot(twigDir, attachDir);
@@ -868,7 +939,7 @@ void TreeGenerator::buildTwig(
             surfacePos, twigDir, thisLen,
             startR, endR,
             p.lengthSegs, p.noiseAmount, p.noiseFreq,
-            p.gnarl, p.taperPow, p.gravity, rng);
+            p.gnarl, p.taperPow, instGravity, rng);
 
         auto& batch = getBatch(p.material, false);
         size_t hlV = batch.vertices.size(), hlI = batch.indices.size();
@@ -914,16 +985,21 @@ void TreeGenerator::buildRoots(
 
     for (int i = 0; i < p.rootCount; ++i) {
         float az = i * p.rotateOffset + jitter(rng);
-        float el = p.spreadAngle + jitter(rng);  // 接近90°=先近水平铺开
+        float el = p.spreadAngle + varyBy(rng, p.spreadAngleVar) + jitter(rng);  // 接近90°=先近水平铺开
 
         // 以树干轴为参考，先抬到 spreadAngle 再绕轴旋方位(spreadAngle>90 即朝下俯冲入地)
         glm::vec3 rootDir = rotateAroundAxis(baseDir, baseRight, el);
         rootDir = rotateAroundAxis(rootDir, baseDir, az);
         rootDir = glm::normalize(rootDir);
 
-        float thisLen = p.length * jitterLen(rng);
-        float startR  = baseRadius * p.radiusScale;
-        float endR    = startR * p.endRatio;
+        // 每根实例的长度/半径/锥度/重力 variance(默认0=关闭)
+        float instRadScale = std::max(0.01f, p.radiusScale + varyBy(rng, p.radiusScaleVar));
+        float instEndRatio = std::max(0.01f, p.endRatio    + varyBy(rng, p.endRatioVar));
+        float instGravity  = p.gravity + varyBy(rng, p.gravityVar);  // 不clamp: 保留旧数据>1/负值语义
+
+        float thisLen = std::max(0.05f, p.length + varyBy(rng, p.lengthVar)) * jitterLen(rng);
+        float startR  = baseRadius * instRadScale;
+        float endR    = startR * instEndRatio;
 
         // 从树干“表面”发出，而非从轴心穿出；再沿径向回沉一小段嵌入树干实体，
         // 使根基与树干实体互相重叠(而非仅贴表面)，从根本上消除近水平粗根的接缝空隙。
@@ -941,7 +1017,7 @@ void TreeGenerator::buildRoots(
             surfacePos, rootDir, thisLen,
             startR, endR,
             p.lengthSegs, p.noiseAmount, p.noiseFreq,
-            p.gnarl, p.taperPow, p.gravity, rng,
+            p.gnarl, p.taperPow, instGravity, rng,
             p.jointCount, p.jointBulge);
 
         size_t hlV = batch.vertices.size(), hlI = batch.indices.size();
@@ -1101,7 +1177,6 @@ void TreeGenerator::buildSpine(
     float parentLen, int depth)
 {
     const auto& p = node->params;
-    float spineLen = parentLen * p.lengthRatio;
     std::mt19937 rng(p.seed + depth * 61 + m_specimenSeedOffset);
     std::uniform_real_distribution<float> jitter(-6.0f, 6.0f);
     std::uniform_real_distribution<float> jitterLen(0.85f, 1.15f);
@@ -1147,13 +1222,19 @@ void TreeGenerator::buildSpine(
         }
 
         float az = i * p.rotateOffset + jitter(rng);
-        float el = p.spreadAngle + jitter(rng);
+        float el = p.spreadAngle + varyBy(rng, p.spreadAngleVar) + jitter(rng);
         glm::vec3 spineDir = rotateAroundAxis(attachDir, attachRight, el);
         spineDir = rotateAroundAxis(spineDir, attachDir, az);
 
-        float thisLen = spineLen * jitterLen(rng);
-        float startR  = attachRadius * p.radiusScale;
-        float endR    = startR * p.endRatio;
+        // 每根实例的长度/半径/锥度/重力 variance(默认0=关闭)
+        float instLenRatio = std::max(0.02f, p.lengthRatio + varyBy(rng, p.lengthRatioVar));
+        float instRadScale = std::max(0.01f, p.radiusScale + varyBy(rng, p.radiusScaleVar));
+        float instEndRatio = std::max(0.01f, p.endRatio    + varyBy(rng, p.endRatioVar));
+        float instGravity  = p.gravity + varyBy(rng, p.gravityVar);  // 不clamp: 保留旧数据>1/负值语义
+
+        float thisLen = parentLen * instLenRatio * jitterLen(rng);
+        float startR  = attachRadius * instRadScale;
+        float endR    = startR * instEndRatio;
 
         // 从父级表面发出
         glm::vec3 radial = spineDir - attachDir * glm::dot(spineDir, attachDir);
@@ -1165,7 +1246,7 @@ void TreeGenerator::buildSpine(
             surfacePos, spineDir, thisLen,
             startR, endR,
             p.lengthSegs, p.noiseAmount, p.noiseFreq,
-            p.gnarl, p.taperPow, p.gravity, rng);
+            p.gnarl, p.taperPow, instGravity, rng);
 
         auto& batch = getBatch(p.material, false);
         size_t hlV = batch.vertices.size(), hlI = batch.indices.size();
@@ -1306,4 +1387,371 @@ void TreeGenerator::buildFrond(
         }
     }
     afterAppend(batch, hlV, hlI);
+}
+
+// ============================================================================
+//  FBX 导入 / 散布
+// ============================================================================
+
+namespace {
+// 由正交基(列 right/up/normal)构造归一四元数。
+glm::quat quatFromBasis(const glm::vec3& r, const glm::vec3& u, const glm::vec3& n) {
+    return glm::normalize(glm::quat_cast(glm::mat3(r, u, n)));
+}
+// 确保 cached 已加载: 路径变或 reload 置位时调 loadFBX。填 err/cached, 清 reload。
+void ensureLoaded(std::shared_ptr<ImportedMesh>& cached, std::string& err,
+                  bool& reload, const std::string& path) {
+    if (path.empty()) { cached.reset(); err = "未指定 FBX 路径"; reload = false; return; }
+    if (reload || !cached) {
+        ImportedMesh m = MeshImport::loadFBX(path);
+        reload = false;
+        if (m.ok) { cached = std::make_shared<ImportedMesh>(std::move(m)); err.clear(); }
+        else      { cached.reset(); err = m.error.empty() ? "加载失败" : m.error; }
+    }
+}
+// 从骨架抽取一条主脊链(root 起, 每步取首个子骨骼)。无骨骼返回空。
+std::vector<int> boneSpine(const std::vector<ImportedBone>& bones) {
+    std::vector<int> chain;
+    if (bones.empty()) return chain;
+    int root = -1;
+    for (int i = 0; i < (int)bones.size(); ++i)
+        if (bones[i].parent < 0) { root = i; break; }
+    if (root < 0) root = 0;
+    std::vector<std::vector<int>> kids(bones.size());
+    for (int i = 0; i < (int)bones.size(); ++i)
+        if (bones[i].parent >= 0 && bones[i].parent < (int)bones.size())
+            kids[bones[i].parent].push_back(i);
+    int cur = root, guard = 0;
+    while (cur >= 0 && guard++ < 4096) {
+        chain.push_back(cur);
+        cur = kids[cur].empty() ? -1 : kids[cur][0];
+    }
+    return chain;
+}
+} // namespace
+
+// ImportTrunk: 烘导入网格到 branch batch(应用 scale + offset), 从骨骼链(或 AABB 竖直轴)
+// 换算出 rings 供下游 Scatter 撒叶。
+std::vector<BranchRing> TreeGenerator::buildImportTrunk(const ImportTrunkNode* node,
+                                                        glm::vec3 offset) {
+    std::vector<BranchRing> rings;
+    const auto& p = node->params;
+    ensureLoaded(p.cached, p.loadError, p.requestReload, p.fbxPath);
+    if (!p.cached || !p.cached->ok) return rings;
+    const ImportedMesh& mesh = *p.cached;
+    float s = p.scale;
+
+    // AABB(缩放+平移后), 用于高度归一(风)与无骨骼时的竖直轴 + 半径估计
+    glm::vec3 mn(1e9f), mx(-1e9f);
+    for (const glm::vec3& q : mesh.positions) {
+        glm::vec3 w = q * s + offset;
+        mn = glm::min(mn, w); mx = glm::max(mx, w);
+    }
+    float H = mx.y - mn.y; if (H < 1e-4f) H = 1.0f;
+    float horiz = 0.25f * ((mx.x - mn.x) + (mx.z - mn.z));  // 平均水平半展
+
+    // 1) 烘网格到 branch batch(stride 10)
+    auto& batch = getBatch(p.material, false);
+    size_t hlV = batch.vertices.size(), hlI = batch.indices.size();
+    uint32_t base = (uint32_t)(batch.vertices.size() / 10);
+    for (size_t i = 0; i < mesh.positions.size(); ++i) {
+        glm::vec3 w   = mesh.positions[i] * s + offset;
+        glm::vec3 nrm = (i < mesh.normals.size()) ? mesh.normals[i] : glm::vec3(0,1,0);
+        glm::vec2 uv  = (i < mesh.uvs.size())     ? mesh.uvs[i]     : glm::vec2(0,0);
+        float hr = (w.y - mn.y) / H;
+        float wnd = m_windW * hr;
+        batch.vertices.insert(batch.vertices.end(),
+            {w.x,w.y,w.z, nrm.x,nrm.y,nrm.z, uv.x,uv.y, wnd, m_windPhase});
+    }
+    for (uint32_t idx : mesh.indices) batch.indices.push_back(base + idx);
+    afterAppend(batch, hlV, hlI);
+
+    // 2) rings: 骨骼主脊链 → 否则竖直轴  (下方骨架填充见 2b)
+    std::vector<glm::vec3> centers;
+    std::vector<int> spine = boneSpine(mesh.bones);
+    if (spine.size() >= 2) {
+        for (int bi : spine) centers.push_back(mesh.bones[bi].restPos * s + offset);
+    } else {
+        int segs = 8;
+        glm::vec3 c0(0.5f*(mn.x+mx.x), mn.y, 0.5f*(mn.z+mx.z));
+        for (int i = 0; i <= segs; ++i)
+            centers.push_back(c0 + glm::vec3(0, H * (float)i / (float)segs, 0));
+    }
+    for (size_t i = 0; i < centers.size(); ++i) {
+        glm::vec3 dir = (i + 1 < centers.size()) ? (centers[i+1] - centers[i])
+                      : (i > 0 ? centers[i] - centers[i-1] : glm::vec3(0,1,0));
+        if (glm::dot(dir, dir) < 1e-8f) dir = glm::vec3(0,1,0);
+        dir = glm::normalize(dir);
+        glm::vec3 right = perpendicular(dir);
+        float t = (centers.size() > 1) ? (float)i / (float)(centers.size()-1) : 0.0f;
+        float radius = std::max(0.01f, horiz * (1.0f - 0.65f * t));
+        rings.push_back({centers[i], radius, dir, right});
+    }
+
+    // 2b) 骨骼 Nanite Assembly 导出数据: 带骨架时填充 m_out->skeleton + skinBase。
+    //     仿真组划分(DynamicWind 三组): 0=树干(主脊链)/1=枝(中间骨)/2=细枝叶(leafTwig 末端)。
+    //     rest 位姿用 translation-only(SpeedTree 骨架本为位置链, 风效为运行时程序仿真, 无需旋转姿态)。
+    if (mesh.hasSkeleton() && !mesh.boneIdx.empty()) {
+        std::vector<int> spineIdx = boneSpine(mesh.bones);
+        std::vector<char> onSpine(mesh.bones.size(), 0);
+        for (int bi : spineIdx) if (bi >= 0 && bi < (int)onSpine.size()) onSpine[bi] = 1;
+
+        m_out->skeleton.clear();
+        m_out->skeleton.reserve(mesh.bones.size());
+        for (size_t i = 0; i < mesh.bones.size(); ++i) {
+            const ImportedBone& b = mesh.bones[i];
+            int grp = b.leafTwig ? 2 : (onSpine[i] ? 0 : 1);   // 末端叶枝 / 主脊树干 / 中间枝
+            m_out->skeleton.push_back({b.restPos * s + offset, b.parent, b.name, grp});
+        }
+
+        TreeMeshData::SkinBase& sb = m_out->skinBase;
+        sb = {};
+        sb.material = mesh.material;
+        sb.pts.reserve(mesh.positions.size());
+        for (size_t i = 0; i < mesh.positions.size(); ++i) {
+            sb.pts.push_back(mesh.positions[i] * s + offset);
+            sb.nrms.push_back(i < mesh.normals.size() ? mesh.normals[i] : glm::vec3(0,1,0));
+            sb.uvs.push_back(i < mesh.uvs.size() ? mesh.uvs[i] : glm::vec2(0,0));
+            sb.boneIdx.push_back(i < mesh.boneIdx.size() ? mesh.boneIdx[i] : glm::ivec4(-1));
+            sb.boneWt.push_back(i < mesh.boneWt.size() ? mesh.boneWt[i] : glm::vec4(0.0f));
+        }
+        sb.idx = mesh.indices;
+    }
+    return rings;
+}
+
+// ImportLeaf: 烘导入叶单体到 leaf batch(stride 16), 应用 scale, 置于 origin(独立预览)。
+void TreeGenerator::buildImportLeaf(const ImportLeafNode* node, glm::vec3 origin) {
+    const auto& p = node->params;
+    ensureLoaded(p.cached, p.loadError, p.requestReload, p.fbxPath);
+    if (!p.cached || !p.cached->ok) return;
+    const ImportedMesh& mesh = *p.cached;
+    float s = p.scale;
+    glm::vec3 col = p.material.albedo;
+
+    auto& batch = getBatch(p.material, true);
+    size_t hlV = batch.vertices.size(), hlI = batch.indices.size();
+    uint32_t base = (uint32_t)(batch.vertices.size() / 16);
+    for (size_t i = 0; i < mesh.positions.size(); ++i) {
+        glm::vec3 w   = mesh.positions[i] * s + origin;
+        glm::vec3 nrm = (i < mesh.normals.size()) ? mesh.normals[i] : glm::vec3(0,0,1);
+        glm::vec2 uv  = (i < mesh.uvs.size())     ? mesh.uvs[i]     : glm::vec2(0,0);
+        batch.vertices.insert(batch.vertices.end(),
+            {w.x,w.y,w.z, nrm.x,nrm.y,nrm.z, uv.x,uv.y,
+             col.r,col.g,col.b, m_windW, m_windPhase, origin.x,origin.y,origin.z});
+    }
+    for (uint32_t idx : mesh.indices) batch.indices.push_back(base + idx);
+    afterAppend(batch, hlV, hlI);
+}
+
+// Scatter: 沿父级 rings 撒 count 片叶原型。生成 InstancedProto(供 USD PointInstancer),
+// 同时把每片叶烘进 leaf batch(供视口/阴影/拾取/OBJ-FBX 导出)。
+void TreeGenerator::buildScatter(const ScatterNode* node,
+                                 const std::vector<BranchRing>* parentRings,
+                                 glm::vec3 origin, glm::vec3 dir) {
+    const auto& p = node->params;
+
+    // 1) 构建各变体的原型网格。以"茎基"归零(令实例绕茎基旋转, attach = 茎基落点)。
+    //    quatFromBasis 约定原型局部 +Y = 生长方向, 故茎基 = 局部 Y 最小端、横向取重心。
+    //    每个变体按材质拆 part: 被判为"枝干"的 part(trunkPart)复用父级 Trunk 材质单独成一个
+    //    proto, 其余 part(叶子)合成另一个 proto(用 FBX 自带材质)。散布时每根细枝均匀随机
+    //    选一个变体, 该变体的所有 proto 共用同一份实例 transform(枝干与叶子一起摆放)。
+    std::vector<TreeMeshData::InstancedProto> protos;
+    for (const auto& var : p.variants) {
+        ensureLoaded(var.cached, var.loadError, var.requestReload, var.fbxPath);
+        if (!var.cached || !var.cached->ok || var.cached->positions.empty()) continue;
+        const ImportedMesh& src = *var.cached;
+
+        // 茎基锚点: 用 FBX 原点(0,0,0)。SpeedTree 导出的单枝/单叶, 其模型 pivot 即生长连接点,
+        // 实例化时正是绕此点旋转+平移到 attach 落点。旧方案用(重心x, minY, 重心z)会挪走 pivot,
+        // 令整根实例枝相对 attach 偏移 → 悬浮。此处不减重心/minY, 直接以 pivot 为局部原点。
+        glm::vec3 anchor(0.0f);
+
+        // 一个变体 = 一个 proto(完整几何 + 一份实例 transform)。含多材质时按材质分段(subs):
+        // trunkPart 段复用父级 Trunk 材质, 其余段用 FBX 自带材质。整枝共用一份实例, 逐段切材质。
+        TreeMeshData::InstancedProto proto;
+        std::unordered_map<uint32_t, uint32_t> remap;   // 全局顶点 → proto 内紧凑索引(整枝共享)
+        auto appendRange = [&](uint32_t off, uint32_t cnt, const MaterialParams& mat) {
+            if (cnt == 0) return;
+            TreeMeshData::ProtoSub sub;
+            sub.idxOffset = (uint32_t)proto.idx.size();
+            sub.material  = mat;
+            for (uint32_t k = 0; k < cnt; ++k) {
+                uint32_t gi = src.indices[off + k];
+                auto it = remap.find(gi);
+                uint32_t li;
+                if (it == remap.end()) {
+                    li = (uint32_t)proto.pts.size();
+                    remap[gi] = li;
+                    proto.pts.push_back(src.positions[gi] - anchor);
+                    proto.nrms.push_back(gi < src.normals.size() ? src.normals[gi] : glm::vec3(0,0,1));
+                    proto.uvs.push_back(gi < src.uvs.size() ? src.uvs[gi] : glm::vec2(0,0));
+                } else li = it->second;
+                proto.idx.push_back(li);
+            }
+            sub.idxCount = (uint32_t)proto.idx.size() - sub.idxOffset;
+            proto.subs.push_back(std::move(sub));
+        };
+
+        if (src.parts.empty()) {
+            appendRange(0, (uint32_t)src.indices.size(), p.material);
+        } else {
+            for (int pi = 0; pi < (int)src.parts.size(); ++pi) {
+                const auto& sm = src.parts[pi];
+                const MaterialParams& mat = (pi == var.trunkPart)
+                    ? m_scatterTrunkMaterial : sm.material;
+                appendRange(sm.indexOffset, sm.indexCount, mat);
+            }
+        }
+        if (proto.subs.empty()) continue;
+        proto.material = proto.subs[0].material;   // 兼容字段
+        protos.push_back(std::move(proto));
+    }
+    if (protos.empty()) return;   // 无可用变体, 不撒叶
+    const int variantCount = (int)protos.size();
+
+    // 2) 撒点。优先: 沿父级枝干骨骼的"末端细枝"逐段撒叶(每段 count 片)。
+    //    无骨骼时退化到旧路径: 沿父级 rings 黄金角外扩。
+    std::mt19937 rng(p.seed + m_specimenSeedOffset);
+    std::uniform_real_distribution<float> jitter(-p.normalJitter, p.normalJitter);
+    std::uniform_real_distribution<float> rot01(0.0f, 1.0f);
+    float goldenAngle = glm::radians(137.508f);
+
+    float rs = std::clamp(p.regionStart, 0.0f, 1.0f);
+    float re = std::clamp(p.regionEnd,   0.0f, 1.0f);
+    if (re < rs) std::swap(rs, re);
+
+    // 视口预览与 USD 导出统一走 proto 实例化(Renderer 端 glDrawElementsInstanced /
+    // 导出端 PointInstancer)。此处不再逐顶点烘焙预览 batch(散布叶动辄几十万顶点,
+    // 每帧重建+全量上传是拖参数卡顿的元凶)。
+
+    // 生成一片叶: 均匀随机选一个变体(proto), 把实例 transform 记入该 proto。
+    // 一个 proto 即整根实例枝, 其内部材质分段共用这份实例 transform。
+    auto emitLeaf = [&](glm::vec3 attach, glm::vec3 leafRight, glm::vec3 leafUp,
+                        glm::vec3 leafNormal, float sc, int boneIdx) {
+        glm::quat q = quatFromBasis(leafRight, leafUp, leafNormal);
+        int vi = (variantCount > 1) ? (int)(rng() % (uint32_t)variantCount) : 0;
+        protos[vi].instances.push_back({attach, q, glm::vec3(sc), boneIdx});
+    };
+
+    // 在一段细枝对应的真实 mesh 顶点上撒 count 片叶(嫁接)。
+    // twigDirW: 该段 父骨→叶端骨 的世界方向, 仅用于叶轴抬升的参考(叶从沿枝方向朝外扩)。
+    // g01: 该段根→尖归一位置, 用于根大尖小的缩放渐变。
+    // cand: 该段对应的枝干 mesh 顶点索引(叶端骨 + 父骨主导)。为空则不撒(避免悬空)。
+    // 核心: 茎基 = 真实枝表面顶点(positions[vi]), 朝外方向 = 该顶点法线。叶端骨常延伸到
+    //       空中(原树叶位), 其自身无 mesh 顶点, 落点自然回退到父骨的枝末梢表面顶点 → 不悬空。
+    auto scatterSegment = [&](glm::vec3 twigDirW, float g01, int boneIdx,
+                              const std::vector<int>& cand) {
+        if (cand.empty()) return;
+        glm::vec3 twigDir = (glm::length(twigDirW) > 1e-6f) ? glm::normalize(twigDirW) : glm::vec3(0,1,0);
+        float falloff = glm::mix(1.0f, p.tipScale, glm::clamp(g01, 0.0f, 1.0f));
+        float s = m_scatterTrunkScale;
+        glm::vec3 off = m_scatterTrunkOffset;
+        const auto& mp = *m_scatterTrunk;
+        std::uniform_int_distribution<size_t> pick(0, cand.size() - 1);
+        for (int j = 0; j < p.count; ++j) {
+            int vi = cand[pick(rng)];
+            // 茎基 = 真实枝皮顶点(世界系)。这才是"嫁接到 mesh 位置", 不再沿骨轴插值。
+            glm::vec3 attach = mp.positions[vi] * s + off;
+            // 朝外方向 = 顶点法线。法线无效时退回径向(顶点相对段方向的垂向)。
+            glm::vec3 outDir(0,1,0);
+            if (vi < (int)mp.normals.size() && glm::length(mp.normals[vi]) > 1e-4f)
+                outDir = glm::normalize(mp.normals[vi]);
+            // 叶轴: 从沿枝方向 twigDir 朝外扩 outDir 抬起 spreadAngle(带抖动)
+            float spread = glm::radians(p.spreadAngle) * (0.5f + 0.5f * rot01(rng)) + jitter(rng);
+            glm::vec3 leafUp = std::cos(spread) * twigDir + std::sin(spread) * outDir;
+            if (glm::length(leafUp) < 1e-5f) leafUp = outDir;
+            leafUp = glm::normalize(leafUp);
+            glm::vec3 leafNormal = outDir;
+            glm::vec3 leafRight = glm::cross(leafUp, leafNormal);
+            if (glm::length(leafRight) < 1e-5f) leafRight = perpendicular(leafUp);
+            leafRight = glm::normalize(leafRight);
+            leafNormal = glm::normalize(glm::cross(leafRight, leafUp));
+            float sc = p.leafScale * falloff * (1.0f + varyBy(rng, p.leafScaleVar));
+            if (sc < 1e-4f) sc = 1e-4f;
+            emitLeaf(attach, leafRight, leafUp, leafNormal, sc, boneIdx);
+        }
+    };
+
+    if (m_scatterTrunk && m_scatterTrunk->hasSkeleton() && m_scatterTrunk->hasLeafTwigs()) {
+        // 骨骼路径: 只在"叶段末端"(leafTwig, SpeedTree 命名分段识别出的枝梢)上撒叶,
+        // 每段撒 count 片。主干/粗枝不长叶。细枝段 = 父骨骼位置 → 叶段末端骨骼位置。
+        const auto& bones = m_scatterTrunk->bones;
+        float s = m_scatterTrunkScale;
+        glm::vec3 off = m_scatterTrunkOffset;
+        // 逐骨归类主导顶点: 每个 mesh 顶点归到其最大权重骨。供嫁接时按段取候选枝干顶点。
+        std::vector<std::vector<int>> boneVerts(bones.size());
+        {
+            const auto& mp = *m_scatterTrunk;
+            if (!mp.boneIdx.empty() && mp.boneIdx.size() == mp.positions.size()) {
+                for (int i = 0; i < (int)mp.positions.size(); ++i) {
+                    const glm::ivec4& bidx = mp.boneIdx[i];
+                    const glm::vec4&  bwt  = mp.boneWt[i];
+                    int dom = -1; float best = 0.0f;
+                    for (int k = 0; k < 4; ++k)
+                        if (bidx[k] >= 0 && bwt[k] > best) { best = bwt[k]; dom = bidx[k]; }
+                    if (dom >= 0 && dom < (int)boneVerts.size()) boneVerts[dom].push_back(i);
+                }
+            }
+        }
+        // 整株 Y 高度范围(世界系), 用于根→尖缩放渐变的归一化
+        float minY = 1e9f, maxY = -1e9f;
+        for (const auto& b : bones) {
+            float y = b.restPos.y * s + off.y;
+            minY = std::min(minY, y); maxY = std::max(maxY, y);
+        }
+        float invH = (maxY - minY > 1e-4f) ? 1.0f / (maxY - minY) : 0.0f;
+        std::vector<int> cand;
+        for (int bi = 0; bi < (int)bones.size(); ++bi) {
+            if (!bones[bi].leafTwig) continue;
+            int par = bones[bi].parent;
+            if (par < 0) continue;
+            glm::vec3 start = bones[par].restPos * s + off;   // 世界(缩放+平移)骨位
+            glm::vec3 end   = bones[bi].restPos  * s + off;
+            glm::vec3 twigDirW = end - start;                 // 沿枝方向(供叶轴抬升参考)
+            float g01 = (0.5f * (start.y + end.y) - minY) * invH;  // 段中点归一高度
+            // 候选枝干顶点: 优先用叶端骨自身主导的 mesh 顶点(嫁接到真实枝皮)。叶端骨常延伸到
+            // 空中(原树叶位)而无自身顶点, 此时回退到父骨顶点(枝末梢表面), 避免悬空。
+            cand.clear();
+            if (!boneVerts[bi].empty())
+                cand = boneVerts[bi];
+            else
+                cand = boneVerts[par];
+            scatterSegment(twigDirW, g01, bi, cand);  // bi = 该叶簇所属 leafTwig 骨索引(刚性绑定)
+        }
+    } else {
+        // 退化路径: 沿父级 rings 撒 count 片(无骨骼枝干)。
+        bool haveRings = (parentRings && !parentRings->empty());
+        for (int i = 0; i < p.count; ++i) {
+            float f = (p.count > 1) ? (float)i / (float)(p.count - 1) : 0.5f;
+            float t = glm::mix(rs, re, f);
+            glm::vec3 axisPos, axisDir, axisRight; float axisRadius = 0.0f;
+            if (haveRings) {
+                t = glm::clamp(t + (rot01(rng) - 0.5f) / (float)std::max(1, p.count), 0.0f, 1.0f);
+                sampleRings(*parentRings, t, axisPos, axisDir, axisRight, axisRadius);
+            } else {
+                axisPos = origin; axisDir = glm::normalize(dir); axisRight = perpendicular(axisDir);
+            }
+            axisDir = glm::normalize(axisDir);
+            glm::vec3 fwd = glm::normalize(glm::cross(axisDir, axisRight));
+            float az = goldenAngle * (float)i + (rot01(rng) - 0.5f) * 0.7f;
+            glm::vec3 outDir = glm::normalize(axisRight * std::cos(az) + fwd * std::sin(az));
+            float spread = glm::radians(p.spreadAngle) * (rot01(rng) - 0.5f) * 2.0f;
+            glm::vec3 leafUp = glm::normalize(outDir + axisDir * (0.25f + jitter(rng)));
+            leafUp = rotateAroundAxis(leafUp, axisRight, glm::degrees(spread));
+            leafUp = glm::normalize(leafUp);
+            glm::vec3 leafNormal = outDir;
+            glm::vec3 leafRight = glm::normalize(glm::cross(leafUp, leafNormal));
+            leafNormal = glm::normalize(glm::cross(leafRight, leafUp));
+            glm::vec3 attach = axisPos + outDir * axisRadius;
+            float sc = p.leafScale * (1.0f + varyBy(rng, p.leafScaleVar));
+            if (sc < 1e-4f) sc = 1e-4f;
+            emitLeaf(attach, leafRight, leafUp, leafNormal, sc, -1);
+        }
+    }
+    // 散布叶暂不支持拾取/高亮/投影(实例化预览), 故不调 afterAppend。
+
+    for (auto& proto : protos)
+        if (!proto.instances.empty())
+            m_out->protos.push_back(std::move(proto));
 }

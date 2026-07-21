@@ -44,6 +44,17 @@ add_library(sol2_header INTERFACE)
 target_include_directories(sol2_header INTERFACE ${CMAKE_SOURCE_DIR}/external/sol2)
 target_link_libraries(sol2_header INTERFACE lua_static)
 
+# ---- ufbx（单文件 FBX 解析库: 读骨骼/蒙皮/贴图, 供导入 SpeedTree 枝干/枝叶单体） ----
+set(UFBX_DIR ${CMAKE_SOURCE_DIR}/external/ufbx)
+add_library(ufbx STATIC ${UFBX_DIR}/ufbx.c)
+target_include_directories(ufbx PUBLIC ${UFBX_DIR})
+if(WIN32)
+    target_compile_definitions(ufbx PRIVATE _CRT_SECURE_NO_WARNINGS)
+endif()
+
+# [临时] FBX 结构探针
+add_executable(fbxprobe ${UFBX_DIR}/probe.cpp)
+target_link_libraries(fbxprobe PRIVATE ufbx)
 
 # ---- 源文件 ----
 file(GLOB_RECURSE SOURCES "src/*.cpp")
@@ -69,6 +80,7 @@ target_link_libraries(${PROJECT_NAME}
         httplib::httplib
         nlohmann_json::nlohmann_json
         sol2_header
+        ufbx
 )
 if(WIN32)
     target_link_libraries(${PROJECT_NAME} PRIVATE opengl32 comdlg32)

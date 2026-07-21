@@ -21,6 +21,9 @@ namespace ProjectIO {
     bool exportOBJ(const TreeMeshData& mesh, const std::string& path);
     // 把已生成的树网格导出为 FBX(ASCII 7.4): 几何 + 材质 + 贴图引用。返回是否成功。
     bool exportFBX(const TreeMeshData& mesh, const std::string& path);
+    // 把已生成的树网格导出为 USD(.usda) Nanite Assembly: 枝干合并为 base Mesh,
+    // 叶片(四边形)提取为 PointInstancer 原型+实例, 供 UE 实例化省内存导入。返回是否成功。
+    bool exportUSD(const TreeMeshData& mesh, const std::string& path);
 
     // ---- 单节点参数 kv 接口(供 API/脚本读写节点参数, 复用 .vtree 的字段命名与解析) ----
     // 把单个节点的全部参数导出为 key->value 字符串表(不含 NODE 头/ENDNODE)。

@@ -7,6 +7,7 @@
 void Renderer::init() {
     m_branchShader.loadFromFiles("shaders/branch.vert", "shaders/branch.frag");
     m_leafShader.loadFromFiles("shaders/leaf.vert",     "shaders/leaf.frag");
+    m_leafInstShader.loadFromFiles("shaders/leaf_inst.vert", "shaders/leaf.frag");
     m_gridShader.loadFromFiles("shaders/grid.vert",     "shaders/grid.frag");
     m_skyShader.loadFromFiles("shaders/sky.vert",       "shaders/sky.frag");
     m_depthShader.loadFromFiles("shaders/depth.vert",   "shaders/depth.frag");
@@ -48,6 +49,7 @@ void Renderer::initShadowMap() {
 void Renderer::shutdown() {
     m_branchShader.destroy();
     m_leafShader.destroy();
+    m_leafInstShader.destroy();
     m_gridShader.destroy();
     m_skyShader.destroy();
     m_depthShader.destroy();
@@ -59,6 +61,9 @@ void Renderer::shutdown() {
     for (auto& b : m_batches)
         b.mesh.destroy();
     m_batches.clear();
+    for (auto& ib : m_instBatches)
+        ib.destroy();
+    m_instBatches.clear();
     for (auto& [k, t] : m_texCache) if (t) t->destroy();
     m_texCache.clear();
     m_gridMesh.destroy();
@@ -78,31 +83,144 @@ std::shared_ptr<Texture> Renderer::getTexture(const std::string& path, bool sRGB
     return tex;
 }
 
-void Renderer::uploadTreeMesh(const TreeMeshData& data) {
-    for (auto& b : m_batches)
-        b.mesh.destroy();
-    m_batches.clear();
+void Renderer::GpuInstancedBatch::destroy() {
+    if (vao)      { glDeleteVertexArrays(1, &vao); vao = 0; }
+    if (vboProto) { glDeleteBuffers(1, &vboProto); vboProto = 0; }
+    if (ebo)      { glDeleteBuffers(1, &ebo); ebo = 0; }
+    if (vboInst)  { glDeleteBuffers(1, &vboInst); vboInst = 0; }
+    instanceCount = 0;
+    subs.clear();
+}
 
-    for (const auto& batch : data.batches) {
-        if (batch.vertices.empty()) continue;
-        GpuBatch gb;
+void Renderer::uploadTreeMesh(const TreeMeshData& data) {
+    // 方案2: 复用已有 GPU buffer。拖参数时 batch 数量/布局通常不变(只有顶点数据变),
+    // 逐个复用同索引处的 Mesh(update 只重传数据, 不 glGen/glDelete 对象), 避免每帧对象 churn。
+    // 收集本次有效 batch(跳过空顶点)。
+    std::vector<const MeshBatch*> valid;
+    valid.reserve(data.batches.size());
+    for (const auto& batch : data.batches)
+        if (!batch.vertices.empty()) valid.push_back(&batch);
+
+    // 多出的旧 batch 释放; 缺的补齐。
+    for (size_t i = valid.size(); i < m_batches.size(); ++i)
+        m_batches[i].mesh.destroy();
+    m_batches.resize(valid.size());
+
+    for (size_t i = 0; i < valid.size(); ++i) {
+        const MeshBatch& batch = *valid[i];
+        GpuBatch& gb = m_batches[i];
         gb.material = batch.material;
         gb.isLeaf   = batch.isLeaf;
 
-        if (batch.isLeaf)
+        int wantStride = batch.isLeaf ? 16 : 10;
+        if (gb.mesh.valid() && gb.mesh.strideFloats() == wantStride) {
+            gb.mesh.update(batch.vertices, batch.indices);   // 复用: 只重传数据
+        } else if (batch.isLeaf) {
             // pos(3)+normal(3)+uv(2)+albedo(3)+wind(2)+anchor(3) = 16
             gb.mesh.create(batch.vertices, batch.indices, {3, 3, 2, 3, 2, 3});
-        else
+        } else {
             // pos(3)+normal(3)+uv(2)+wind(2) = 10
             gb.mesh.create(batch.vertices, batch.indices, {3, 3, 2, 2});
+        }
 
         // 贴图走缓存复用：拖参数重建网格时不再重复解码磁盘 PNG
         gb.texBaseColor = getTexture(batch.material.baseColorTex, true);
         gb.texRoughness = getTexture(batch.material.roughnessTex, false);
         gb.texNormal    = getTexture(batch.material.normalTex,    false);
         gb.texOpacity   = getTexture(batch.material.opacityTex,   false);
+    }
 
-        m_batches.push_back(std::move(gb));
+    for (auto& ib : m_instBatches)
+        ib.destroy();
+    m_instBatches.clear();
+
+    // 散布叶实例化批次: 每个 proto 一份原型网格 + 每实例 transform 数组。
+    // 原型顶点布局 (pos3 + normal3 + uv2 = 8 float); 实例布局 (pos3 + quat4 + scale3 = 10 float)。
+    for (const auto& proto : data.protos) {
+        if (proto.pts.empty() || proto.instances.empty()) continue;
+        GpuInstancedBatch ib;
+
+        std::vector<float> pv;
+        pv.reserve(proto.pts.size() * 8);
+        for (size_t i = 0; i < proto.pts.size(); ++i) {
+            const glm::vec3& p = proto.pts[i];
+            glm::vec3 n = i < proto.nrms.size() ? proto.nrms[i] : glm::vec3(0,0,1);
+            glm::vec2 uv = i < proto.uvs.size() ? proto.uvs[i] : glm::vec2(0,0);
+            pv.insert(pv.end(), {p.x,p.y,p.z, n.x,n.y,n.z, uv.x,uv.y});
+        }
+        std::vector<float> iv;
+        iv.reserve(proto.instances.size() * 10);
+        for (const auto& inst : proto.instances) {
+            iv.insert(iv.end(), {inst.pos.x, inst.pos.y, inst.pos.z,
+                                 inst.rot.x, inst.rot.y, inst.rot.z, inst.rot.w,
+                                 inst.scale.x, inst.scale.y, inst.scale.z});
+        }
+        ib.instanceCount = (int)proto.instances.size();
+
+        glGenVertexArrays(1, &ib.vao);
+        glGenBuffers(1, &ib.vboProto);
+        glGenBuffers(1, &ib.ebo);
+        glGenBuffers(1, &ib.vboInst);
+        glBindVertexArray(ib.vao);
+
+        // 原型顶点 (location 0,1,2)
+        glBindBuffer(GL_ARRAY_BUFFER, ib.vboProto);
+        glBufferData(GL_ARRAY_BUFFER, pv.size()*sizeof(float), pv.data(), GL_DYNAMIC_DRAW);
+        const int ps = 8 * sizeof(float);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, ps, (void*)0);
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, ps, (void*)(3*sizeof(float)));
+        glEnableVertexAttribArray(2);
+        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, ps, (void*)(6*sizeof(float)));
+
+        // 索引
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ib.ebo);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, proto.idx.size()*sizeof(uint32_t),
+                     proto.idx.data(), GL_DYNAMIC_DRAW);
+
+        // 每实例数据 (location 3,4,5; divisor=1)
+        glBindBuffer(GL_ARRAY_BUFFER, ib.vboInst);
+        glBufferData(GL_ARRAY_BUFFER, iv.size()*sizeof(float), iv.data(), GL_DYNAMIC_DRAW);
+        const int is = 10 * sizeof(float);
+        glEnableVertexAttribArray(3);
+        glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, is, (void*)0);
+        glVertexAttribDivisor(3, 1);
+        glEnableVertexAttribArray(4);
+        glVertexAttribPointer(4, 4, GL_FLOAT, GL_FALSE, is, (void*)(3*sizeof(float)));
+        glVertexAttribDivisor(4, 1);
+        glEnableVertexAttribArray(5);
+        glVertexAttribPointer(5, 3, GL_FLOAT, GL_FALSE, is, (void*)(7*sizeof(float)));
+        glVertexAttribDivisor(5, 1);
+
+        glBindVertexArray(0);
+
+        // 按材质分段: 每段一个 draw call, 共用同一 VAO/实例 VBO。贴图按段各自绑定。
+        if (proto.subs.empty()) {
+            GpuInstancedBatch::Sub s;
+            s.indexOffset = 0;
+            s.indexCount  = (int)proto.idx.size();
+            s.material    = proto.material;
+            s.texBaseColor = getTexture(s.material.baseColorTex, true);
+            s.texRoughness = getTexture(s.material.roughnessTex, false);
+            s.texNormal    = getTexture(s.material.normalTex,    false);
+            s.texOpacity   = getTexture(s.material.opacityTex,   false);
+            ib.subs.push_back(std::move(s));
+        } else {
+            for (const auto& ps : proto.subs) {
+                GpuInstancedBatch::Sub s;
+                s.indexOffset = (int)ps.idxOffset;
+                s.indexCount  = (int)ps.idxCount;
+                s.material    = ps.material;
+                s.texBaseColor = getTexture(ps.material.baseColorTex, true);
+                s.texRoughness = getTexture(ps.material.roughnessTex, false);
+                s.texNormal    = getTexture(ps.material.normalTex,    false);
+                s.texOpacity   = getTexture(ps.material.opacityTex,   false);
+                ib.subs.push_back(std::move(s));
+            }
+        }
+
+        m_instBatches.push_back(std::move(ib));
     }
 
     // 高亮描边网格(选中节点自身): pos+normal, 用 outline shader 沿法线外扩勾勒轮廓
@@ -129,6 +247,14 @@ void Renderer::computeSceneBounds(const TreeMeshData& data) {
             glm::vec3 p(batch.vertices[i], batch.vertices[i+1], batch.vertices[i+2]);
             mn = glm::min(mn, p);
             mx = glm::max(mx, p);
+            any = true;
+        }
+    }
+    // 散布叶实例化: 几何不在 batches 里, 用实例位置(近似取锚点)纳入包围盒
+    for (const auto& proto : data.protos) {
+        for (const auto& inst : proto.instances) {
+            mn = glm::min(mn, inst.pos);
+            mx = glm::max(mx, inst.pos);
             any = true;
         }
     }
@@ -308,6 +434,52 @@ void Renderer::render(const OrbitCamera& camera, float aspect, bool wireframe) {
             bindBatchTextures(m_branchShader, gb);
             gb.mesh.draw();
         }
+    }
+
+    // 散布叶实例化绘制: 一份原型 + 每实例 transform, glDrawElementsInstanced 一次画完。
+    if (!m_instBatches.empty()) {
+        glDisable(GL_CULL_FACE);
+        m_leafInstShader.use();
+        m_leafInstShader.setMat4("uModel",      glm::value_ptr(model));
+        m_leafInstShader.setMat4("uView",       glm::value_ptr(view));
+        m_leafInstShader.setMat4("uProjection", glm::value_ptr(proj));
+        setLightUniforms(m_leafInstShader);
+        setWindUniforms(m_leafInstShader);
+        for (auto& ib : m_instBatches) {
+            if (!ib.vao || ib.instanceCount == 0) continue;
+            glBindVertexArray(ib.vao);
+            for (auto& s : ib.subs) {
+                if (s.indexCount == 0) continue;
+                m_leafInstShader.setVec3("uAlbedo", s.material.albedo.x,
+                                         s.material.albedo.y, s.material.albedo.z);
+                m_leafInstShader.setFloat("uRoughness",   s.material.roughness);
+                m_leafInstShader.setFloat("uAoStrength",  s.material.aoStrength);
+                m_leafInstShader.setFloat("uSssStrength", s.material.sssStrength);
+                m_leafInstShader.setFloat("uAlphaCutoff", s.material.alphaCutoff);
+                // 贴图绑定(与 bindBatchTextures 同约定: unit 0/1/2/3)
+                bool hasBc = s.texBaseColor && s.texBaseColor->valid();
+                bool hasRo = s.texRoughness && s.texRoughness->valid();
+                bool hasNo = s.texNormal    && s.texNormal->valid();
+                bool hasOp = s.texOpacity   && s.texOpacity->valid();
+                m_leafInstShader.setInt("uTexBaseColor", 0);
+                m_leafInstShader.setInt("uHasBaseColor", hasBc ? 1 : 0);
+                if (hasBc) s.texBaseColor->bind(0);
+                m_leafInstShader.setInt("uTexRoughness", 1);
+                m_leafInstShader.setInt("uHasRoughness", hasRo ? 1 : 0);
+                if (hasRo) s.texRoughness->bind(1);
+                m_leafInstShader.setInt("uTexNormal", 2);
+                m_leafInstShader.setInt("uHasNormal", hasNo ? 1 : 0);
+                if (hasNo) s.texNormal->bind(2);
+                m_leafInstShader.setInt("uTexOpacity", 3);
+                m_leafInstShader.setInt("uHasOpacity", hasOp ? 1 : 0);
+                if (hasOp) s.texOpacity->bind(3);
+
+                glDrawElementsInstanced(GL_TRIANGLES, s.indexCount, GL_UNSIGNED_INT,
+                    (void*)(intptr_t)(s.indexOffset * sizeof(uint32_t)), ib.instanceCount);
+            }
+        }
+        glBindVertexArray(0);
+        glEnable(GL_CULL_FACE);
     }
 
     glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);

@@ -45,11 +45,19 @@ private:
     // 祖先链模式(导出"当前及上游"): 只生成 m_chainNodes 内的节点, 且各多实例节点只长一根。
     bool          m_chainMode  = false;
     std::set<NodeId> m_chainNodes;
+    // Scatter 用: 当前父级 ImportTrunk 的完整骨骼(世界空间需乘 scale+offset)。
+    // 由 processNode 的 ImportTrunk 分支在递归子节点前设置, 供 buildScatter 沿全部
+    // 骨骼段(而非单条主脊)撒叶; 无骨骼枝干时为 nullptr, Scatter 退化到 rings 路径。
+    const class ImportedMesh* m_scatterTrunk       = nullptr;
+    float                     m_scatterTrunkScale  = 1.0f;
+    glm::vec3                 m_scatterTrunkOffset  = glm::vec3(0.0f);
+    // 父级 ImportTrunk 节点的材质参数: 供 Scatter 变体中被判为"枝干"的 part 复用。
+    MaterialParams            m_scatterTrunkMaterial;
     // 顶点风力烘焙: 当前节点的风力基权重与相位, 由 processNode 按节点类型/id 设置。
     float         m_windW = 0.0f;     // 该节点枝条风力基权重(尖端处再乘 tRing)
     float         m_windPhase = 0.0f; // 该节点相位偏移(按节点 id 哈希, 令相邻枝条不同步)
 
-    MeshBatch& getBatch(const MaterialParams& mat, bool isLeaf);
+    MeshBatch& getBatch(const MaterialParams& mat, bool isLeaf, bool instanced = false);
 
     // 方案B 标本测量: 在真实整株里跑一遍, 捕获 targetId 首个实例的父级长度/附着半径,
     // 结果写入 m_specParentLen / m_specParentRadius。
@@ -100,6 +108,21 @@ private:
 
     // Frond：沿父级(Spine)rings 铺一条连续带状蕨叶网格，宽度按叶形轮廓变化
     void buildFrond(const FrondNode* node,
+        const std::vector<BranchRing>* parentRings,
+        glm::vec3 origin, glm::vec3 dir);
+
+    // ---- FBX 导入 / 散布 ----
+    // ImportTrunk: 把导入的枝干网格烘成 branch batch(应用 scale + 平移), 并从骨骼链
+    // (无骨骼时退化为网格 AABB 竖直轴)换算出 rings 供下游 Scatter 撒叶。返回 rings。
+    std::vector<BranchRing> buildImportTrunk(const class ImportTrunkNode* node,
+        glm::vec3 offset);
+
+    // ImportLeaf: 把导入的叶单体网格烘成 leaf batch(原型预览), 应用 scale 后置于 origin。
+    void buildImportLeaf(const class ImportLeafNode* node, glm::vec3 origin);
+
+    // Scatter: 沿父级 rings 撒 count 片叶原型, 生成 InstancedProto(原型网格 + 每实例
+    // transform) 写入 m_out->protos。原型几何取自散布用的叶 FBX(局部空间)。
+    void buildScatter(const class ScatterNode* node,
         const std::vector<BranchRing>* parentRings,
         glm::vec3 origin, glm::vec3 dir);
 

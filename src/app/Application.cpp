@@ -146,18 +146,20 @@ void Application::update() {
         if (!ex->params.requestExport) continue;
         ex->params.requestExport = false;
 
-        // 按 format 选择导出器, 并把路径扩展名规整为 .obj / .fbx。
-        const bool isFbx = (ex->params.format == 1);
-        auto fixExt = [isFbx](std::string p) {
+        // 按 format 选择导出器, 并把路径扩展名规整为 .obj / .fbx / .usda。
+        const int fmt = ex->params.format;   // 0=OBJ 1=FBX 2=USD
+        auto fixExt = [fmt](std::string p) {
             size_t dot = p.find_last_of('.');
             size_t slash = p.find_last_of("/\\");
-            std::string want = isFbx ? ".fbx" : ".obj";
+            std::string want = fmt == 1 ? ".fbx" : (fmt == 2 ? ".usda" : ".obj");
             if (dot != std::string::npos && (slash == std::string::npos || dot > slash))
                 p = p.substr(0, dot);
             return p + want;
         };
-        auto exportMesh = [isFbx](const TreeMeshData& mesh, const std::string& p) {
-            return isFbx ? ProjectIO::exportFBX(mesh, p) : ProjectIO::exportOBJ(mesh, p);
+        auto exportMesh = [fmt](const TreeMeshData& mesh, const std::string& p) {
+            return fmt == 1 ? ProjectIO::exportFBX(mesh, p)
+                 : fmt == 2 ? ProjectIO::exportUSD(mesh, p)
+                            : ProjectIO::exportOBJ(mesh, p);
         };
 
         // 上游节点 = 其输出连到本 Export 输入的节点(遍历各节点的 children 反查)
@@ -173,12 +175,13 @@ void Application::update() {
         }
 
         if (ex->params.exportMode == 1) {
-            // 整株: 从上游节点沿输入链向上追溯到根 Trunk
+            // 整株: 从上游节点沿输入链向上追溯到根 Trunk / ImportTrunk
             NodeId cur = upstreamId, rootTrunk = INVALID_NODE;
             for (int guard = 0; guard < 64 && cur != INVALID_NODE; ++guard) {
                 TreeNode* cn = m_graph.getNode(cur);
                 if (!cn) break;
-                if (cn->getType() == NodeType::Trunk) { rootTrunk = cur; break; }
+                if (cn->getType() == NodeType::Trunk ||
+                    cn->getType() == NodeType::ImportTrunk) { rootTrunk = cur; break; }
                 NodeId parent = INVALID_NODE;   // 找 cur 的父(其 children 含 cur)
                 for (const auto& [pid, pnode] : m_graph.nodes()) {
                     for (const TreeNode* c : m_graph.childrenOf(pid))

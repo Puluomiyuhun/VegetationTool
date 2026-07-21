@@ -37,6 +37,7 @@ void Mesh::create(const std::vector<float>&    vertices,
 
     glBindVertexArray(0);
     m_indexCount = (int)indices.size();
+    m_strideFloats = stride / (int)sizeof(float);
 }
 
 void Mesh::update(const std::vector<float>&    vertices,
