@@ -156,10 +156,18 @@ void UIManager::init(GLFWwindow* window) {
     };
 
     ImFont* font = nullptr;
+    // 中文全集 + 补充少量符号(如 U+21BA ↺ 回退箭头), 否则这些字形会显示成方块。
+    static ImVector<ImWchar> glyphRanges;
+    {
+        ImFontGlyphRangesBuilder b;
+        b.AddRanges(io.Fonts->GetGlyphRangesChineseFull());
+        b.AddChar(0x21BA);  // ↺ 逆时针回退箭头
+        b.BuildRanges(&glyphRanges);
+    }
     for (const char* path : fontPaths) {
         font = io.Fonts->AddFontFromFileTTF(
             path, 15.0f, &fontCfg,
-            io.Fonts->GetGlyphRangesChineseFull()
+            glyphRanges.Data
         );
         if (font) break;
     }

@@ -342,6 +342,7 @@ void writeNode(std::ostream& o, const TreeNode* n) {
         o << "regionStart "  << p.regionStart  << '\n';
         o << "regionEnd "    << p.regionEnd    << '\n';
         o << "spreadAngle "  << p.spreadAngle  << '\n';
+        o << "tuck "         << p.tuck         << '\n';
         o << "spiralStep "   << p.spiralStep   << '\n';
         o << "tipScale "     << p.tipScale     << '\n';
         o << "normalJitter " << p.normalJitter << '\n';
@@ -630,6 +631,7 @@ void applyParams(TreeNode* n, const KV& kv) {
         p.regionStart  = getF(kv, "regionStart",  p.regionStart);
         p.regionEnd    = getF(kv, "regionEnd",    p.regionEnd);
         p.spreadAngle  = getF(kv, "spreadAngle",  p.spreadAngle);
+        p.tuck         = getF(kv, "tuck",         p.tuck);
         p.spiralStep   = getF(kv, "spiralStep",   p.spiralStep);
         p.tipScale     = getF(kv, "tipScale",     p.tipScale);
         p.normalJitter = getF(kv, "normalJitter", p.normalJitter);

@@ -369,6 +369,7 @@ struct ScatterParams {
     float       regionStart  = 0.1f;     // 沿细枝[start,end]区间撒叶
     float       regionEnd     = 1.0f;
     float       spreadAngle   = 55.0f;   // 叶朝向相对枝干径向的抬起抖动上限(度)
+    float       tuck          = 0.0f;    // 内插量(占叶长比例): 沿枝表法线反向把整片叶往枝条柱心平移, 叶根插进枝条、叶尾不凸出(不改朝向)
     float       normalJitter  = 0.4f;    // 朝向随机抖动强度
     float       spiralStep    = 137.5f;  // 沿枝推进每片叶方位角步进(度), 螺旋式散布生长
     float       tipScale      = 1.0f;    // 近枝尖叶相对缩放(近根=1, 近尖=tipScale; <1 越尖越小)

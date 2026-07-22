@@ -58,15 +58,17 @@ static std::string saveMeshFileDialog(const std::string&, int) { return std::str
 static std::string openFbxFileDialog() { return std::string(); }
 #endif
 
-// 公共：绘制 MaterialParams 滑条，返回是否有变化
-static bool drawMaterial(MaterialParams& m, bool hasSSS = false) {
+// 公共：绘制 MaterialParams 滑条，返回是否有变化。def=该节点材质默认值(用于回退钮)。
+static bool rSliderFloat(const char* label, float* v, float vmin, float vmax, float def,
+                         const char* fmt = "%.3f");  // 前置声明(定义在下方)
+static bool drawMaterial(MaterialParams& m, bool hasSSS, const MaterialParams& def) {
     bool changed = false;
     changed |= ImGui::ColorEdit3("Albedo", &m.albedo.x);
-    changed |= ImGui::SliderFloat("Roughness",  &m.roughness,  0.0f, 1.0f);
-    changed |= ImGui::SliderFloat("Metallic",   &m.metallic,   0.0f, 1.0f);
-    changed |= ImGui::SliderFloat("AO Strength",&m.aoStrength, 0.0f, 1.0f);
+    changed |= rSliderFloat("Roughness",  &m.roughness,  0.0f, 1.0f, def.roughness);
+    changed |= rSliderFloat("Metallic",   &m.metallic,   0.0f, 1.0f, def.metallic);
+    changed |= rSliderFloat("AO Strength",&m.aoStrength, 0.0f, 1.0f, def.aoStrength);
     if (hasSSS)
-        changed |= ImGui::SliderFloat("SSS Strength",&m.sssStrength, 0.0f, 1.0f);
+        changed |= rSliderFloat("SSS Strength",&m.sssStrength, 0.0f, 1.0f, def.sssStrength);
 
     ImGui::Spacing();
     ImGui::TextColored({0.8f,0.8f,0.5f,1.0f}, "Textures (drag file path):");
@@ -101,7 +103,7 @@ static bool drawMaterial(MaterialParams& m, bool hasSSS = false) {
     if (hasSSS) {
         // 叶片：不透明度遮罩 + alpha 剔除阈值
         texRow("Opacity Mask (R)",     "##op", m.opacityTex);
-        changed |= ImGui::SliderFloat("Alpha Cutoff", &m.alphaCutoff, 0.0f, 1.0f);
+        changed |= rSliderFloat("Alpha Cutoff", &m.alphaCutoff, 0.0f, 1.0f, def.alphaCutoff);
     }
     return changed;
 }
@@ -129,37 +131,80 @@ static bool sliderFloatVar(const char* label, float* value, float* var,
     return changed;
 }
 
+// 公共：行尾"重置为默认值"小方钮。differs=false(当前值即默认)时置灰不可点。
+// 需在调用方 PushID 作用域内使用以避免同名按钮 ID 冲突。
+static bool resetBtn(bool differs) {
+    bool clicked = false;
+    if (!differs) ImGui::BeginDisabled();
+    // U+21BA ↺ 逆时针回退箭头(字体已补该字形)
+    if (ImGui::Button("\xE2\x86\xBA", ImVec2(ImGui::GetFrameHeight(), 0.0f))) clicked = true;
+    if (!differs) ImGui::EndDisabled();
+    if (differs && ImGui::IsItemHovered()) ImGui::SetTooltip("Reset to default");
+    return clicked;
+}
+
+// 公共：带"重置默认"钮的浮点滑条。布局 [滑条][R钮][标签]，与 sliderFloatVar 一致。
+static bool rSliderFloat(const char* label, float* v, float vmin, float vmax, float def,
+                         const char* fmt) {
+    bool changed = false;
+    ImGui::PushID(label);
+    float sp = ImGui::GetStyle().ItemInnerSpacing.x;
+    ImGui::SetNextItemWidth(ImGui::CalcItemWidth() - ImGui::GetFrameHeight() - sp);
+    changed |= ImGui::SliderFloat("##s", v, vmin, vmax, fmt);
+    ImGui::SameLine(0, sp);
+    if (resetBtn(*v != def)) { *v = def; changed = true; }
+    ImGui::SameLine(0, sp);
+    ImGui::TextUnformatted(label);
+    ImGui::PopID();
+    return changed;
+}
+// 公共：带"重置默认"钮的整型滑条。
+static bool rSliderInt(const char* label, int* v, int vmin, int vmax, int def) {
+    bool changed = false;
+    ImGui::PushID(label);
+    float sp = ImGui::GetStyle().ItemInnerSpacing.x;
+    ImGui::SetNextItemWidth(ImGui::CalcItemWidth() - ImGui::GetFrameHeight() - sp);
+    changed |= ImGui::SliderInt("##s", v, vmin, vmax);
+    ImGui::SameLine(0, sp);
+    if (resetBtn(*v != def)) { *v = def; changed = true; }
+    ImGui::SameLine(0, sp);
+    ImGui::TextUnformatted(label);
+    ImGui::PopID();
+    return changed;
+}
+
 // ---------- TrunkNode ----------
 TrunkNode::TrunkNode() { type = NodeType::Trunk; }
 
 bool TrunkNode::drawProperties() {
     bool changed = false;
+    static const TrunkParams d;  // 默认值来源(结构体初值)
     if (ImGui::CollapsingHeader("Geometry", ImGuiTreeNodeFlags_DefaultOpen)) {
-        changed |= ImGui::SliderFloat("Length",       &params.length,      1.0f, 15.0f);
-        changed |= ImGui::SliderFloat("Start Radius", &params.startRadius, 0.05f, 1.0f);
-        changed |= ImGui::SliderFloat("End Radius",   &params.endRadius,   0.01f, 0.5f);
-        changed |= ImGui::SliderFloat("Base Flare",   &params.baseFlare,   1.0f, 3.0f);
-        changed |= ImGui::SliderFloat("Taper Power",  &params.taperPow,    0.5f, 4.0f);
-        changed |= ImGui::SliderFloat("Noise Amount", &params.noiseAmount, 0.0f, 90.0f);
-        changed |= ImGui::SliderFloat("Noise Freq",   &params.noiseFreq,   0.5f, 8.0f);
-        changed |= ImGui::SliderFloat("Gnarl",        &params.gnarl,       0.0f, 90.0f);
-        changed |= ImGui::SliderInt  ("Joint Count",  &params.jointCount,  0, 20);
-        changed |= ImGui::SliderFloat("Joint Bulge",  &params.jointBulge,  0.0f, 1.0f);
-        changed |= ImGui::SliderInt  ("Sides",        &params.sides,       3, 16);
-        changed |= ImGui::SliderInt  ("Length Segs",  &params.lengthSegs,  2, 24);
-        changed |= ImGui::SliderFloat("UV Tiling U",  &params.uvTilingU,   0.1f, 20.0f);
-        changed |= ImGui::SliderFloat("UV Tiling V",  &params.uvTilingV,   0.1f, 20.0f);
-        changed |= ImGui::SliderInt  ("Seed",         &params.seed,        0, 999);
-        changed |= ImGui::SliderInt  ("Bone Count",   &params.boneCount,   0, 12);
+        changed |= rSliderFloat("Length",       &params.length,      1.0f, 15.0f, d.length);
+        changed |= rSliderFloat("Start Radius", &params.startRadius, 0.05f, 1.0f, d.startRadius);
+        changed |= rSliderFloat("End Radius",   &params.endRadius,   0.01f, 0.5f, d.endRadius);
+        changed |= rSliderFloat("Base Flare",   &params.baseFlare,   1.0f, 3.0f, d.baseFlare);
+        changed |= rSliderFloat("Taper Power",  &params.taperPow,    0.5f, 4.0f, d.taperPow);
+        changed |= rSliderFloat("Noise Amount", &params.noiseAmount, 0.0f, 90.0f, d.noiseAmount);
+        changed |= rSliderFloat("Noise Freq",   &params.noiseFreq,   0.5f, 8.0f, d.noiseFreq);
+        changed |= rSliderFloat("Gnarl",        &params.gnarl,       0.0f, 90.0f, d.gnarl);
+        changed |= rSliderInt  ("Joint Count",  &params.jointCount,  0, 20, d.jointCount);
+        changed |= rSliderFloat("Joint Bulge",  &params.jointBulge,  0.0f, 1.0f, d.jointBulge);
+        changed |= rSliderInt  ("Sides",        &params.sides,       3, 16, d.sides);
+        changed |= rSliderInt  ("Length Segs",  &params.lengthSegs,  2, 24, d.lengthSegs);
+        changed |= rSliderFloat("UV Tiling U",  &params.uvTilingU,   0.1f, 20.0f, d.uvTilingU);
+        changed |= rSliderFloat("UV Tiling V",  &params.uvTilingV,   0.1f, 20.0f, d.uvTilingV);
+        changed |= rSliderInt  ("Seed",         &params.seed,        0, 999, d.seed);
+        changed |= rSliderInt  ("Bone Count",   &params.boneCount,   0, 12, d.boneCount);
     }
     if (ImGui::CollapsingHeader("Placement", ImGuiTreeNodeFlags_DefaultOpen)) {
         // 植株在场景中的位置(一个工程内可摆放多棵独立植被)
-        changed |= ImGui::SliderFloat("Pos X", &params.posX, -50.0f, 50.0f);
-        changed |= ImGui::SliderFloat("Pos Z", &params.posZ, -50.0f, 50.0f);
+        changed |= rSliderFloat("Pos X", &params.posX, -50.0f, 50.0f, d.posX);
+        changed |= rSliderFloat("Pos Z", &params.posZ, -50.0f, 50.0f, d.posZ);
     }
     if (ImGui::CollapsingHeader("Material", ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui::PushID("mat_trunk");
-        changed |= drawMaterial(params.material, false);
+        changed |= drawMaterial(params.material, false, d.material);
         ImGui::PopID();
     }
     return changed;
@@ -170,6 +215,7 @@ BranchNode::BranchNode() { type = NodeType::Branch; }
 
 bool BranchNode::drawProperties() {
     bool changed = false;
+    static const BranchParams d;
     // Generation：生成规律 —— 生成多少、方位如何分布
     if (ImGui::CollapsingHeader("Generation", ImGuiTreeNodeFlags_DefaultOpen)) {
         static const char* kModeNames[] = {
@@ -183,40 +229,40 @@ bool BranchNode::drawProperties() {
         }
         if (params.mode == BranchMode::Interval) {
             // Interval(竹节式): 枝条只长在固定间距的节上
-            changed |= ImGui::SliderFloat("Interval Spacing", &params.intervalSpacing, 0.02f, 0.5f);
-            changed |= ImGui::SliderInt  ("Branches / Node",  &params.branchesPerNode, 1, 6);
+            changed |= rSliderFloat("Interval Spacing", &params.intervalSpacing, 0.02f, 0.5f, d.intervalSpacing);
+            changed |= rSliderInt  ("Branches / Node",  &params.branchesPerNode, 1, 6, d.branchesPerNode);
         } else {
-            changed |= ImGui::SliderInt  ("Branch Count",  &params.branchCount,  1, 8);
+            changed |= rSliderInt  ("Branch Count",  &params.branchCount,  1, 8, d.branchCount);
         }
-        changed |= ImGui::SliderFloat("Rotate Offset", &params.rotateOffset, 0.0f, 360.0f);
-        changed |= ImGui::SliderFloat("Region Start",  &params.regionStart,  0.0f, 1.0f);
-        changed |= ImGui::SliderFloat("Region End",    &params.regionEnd,    0.0f, 1.0f);
-        changed |= ImGui::SliderFloat("Size Falloff",  &params.sizeFalloff,  0.0f, 1.0f);
-        changed |= ImGui::SliderInt  ("Seed",          &params.seed,         0, 999);
-        changed |= ImGui::SliderInt  ("Bone Count",    &params.boneCount,    0, 8);
+        changed |= rSliderFloat("Rotate Offset", &params.rotateOffset, 0.0f, 360.0f, d.rotateOffset);
+        changed |= rSliderFloat("Region Start",  &params.regionStart,  0.0f, 1.0f, d.regionStart);
+        changed |= rSliderFloat("Region End",    &params.regionEnd,    0.0f, 1.0f, d.regionEnd);
+        changed |= rSliderFloat("Size Falloff",  &params.sizeFalloff,  0.0f, 1.0f, d.sizeFalloff);
+        changed |= rSliderInt  ("Seed",          &params.seed,         0, 999, d.seed);
+        changed |= rSliderInt  ("Bone Count",    &params.boneCount,    0, 8, d.boneCount);
     }
     // Spine：单根枝条形态 —— 长度、粗细、下垂、弯曲
     if (ImGui::CollapsingHeader("Spine", ImGuiTreeNodeFlags_DefaultOpen)) {
         changed |= sliderFloatVar("Length Ratio", &params.lengthRatio, &params.lengthRatioVar, 0.1f, 1.0f, 0.5f);
         changed |= sliderFloatVar("Radius Scale", &params.radiusScale, &params.radiusScaleVar, 0.1f, 2.0f, 1.0f);
         changed |= sliderFloatVar("End Ratio",    &params.endRatio,    &params.endRatioVar,    0.01f, 1.0f, 0.5f);
-        changed |= ImGui::SliderFloat("Base Flare",     &params.baseFlare,    1.0f, 5.0f);
-        changed |= ImGui::SliderFloat("Taper Power",    &params.taperPow,     0.5f, 4.0f);
+        changed |= rSliderFloat("Base Flare",     &params.baseFlare,    1.0f, 5.0f, d.baseFlare);
+        changed |= rSliderFloat("Taper Power",    &params.taperPow,     0.5f, 4.0f, d.taperPow);
         changed |= sliderFloatVar("Spread Angle", &params.spreadAngle, &params.spreadAngleVar, 10.0f, 90.0f, 45.0f, "%.1f");
         changed |= sliderFloatVar("Gravity",      &params.gravity,     &params.gravityVar,     0.0f, 1.0f, 0.5f);
-        changed |= ImGui::SliderFloat("Noise Amount",   &params.noiseAmount,  0.0f, 90.0f);
-        changed |= ImGui::SliderFloat("Noise Freq",     &params.noiseFreq,    0.5f, 8.0f);
-        changed |= ImGui::SliderFloat("Gnarl",          &params.gnarl,        0.0f, 90.0f);
-        changed |= ImGui::SliderInt  ("Joint Count",    &params.jointCount,   0, 20);
-        changed |= ImGui::SliderFloat("Joint Bulge",    &params.jointBulge,   0.0f, 1.0f);
-        changed |= ImGui::SliderInt  ("Sides",         &params.sides,        3, 12);
-        changed |= ImGui::SliderInt  ("Length Segs",   &params.lengthSegs,   2, 16);
-        changed |= ImGui::SliderFloat("UV Tiling U",   &params.uvTilingU,    0.1f, 20.0f);
-        changed |= ImGui::SliderFloat("UV Tiling V",   &params.uvTilingV,    0.1f, 20.0f);
+        changed |= rSliderFloat("Noise Amount",   &params.noiseAmount,  0.0f, 90.0f, d.noiseAmount);
+        changed |= rSliderFloat("Noise Freq",     &params.noiseFreq,    0.5f, 8.0f, d.noiseFreq);
+        changed |= rSliderFloat("Gnarl",          &params.gnarl,        0.0f, 90.0f, d.gnarl);
+        changed |= rSliderInt  ("Joint Count",    &params.jointCount,   0, 20, d.jointCount);
+        changed |= rSliderFloat("Joint Bulge",    &params.jointBulge,   0.0f, 1.0f, d.jointBulge);
+        changed |= rSliderInt  ("Sides",         &params.sides,        3, 12, d.sides);
+        changed |= rSliderInt  ("Length Segs",   &params.lengthSegs,   2, 16, d.lengthSegs);
+        changed |= rSliderFloat("UV Tiling U",   &params.uvTilingU,    0.1f, 20.0f, d.uvTilingU);
+        changed |= rSliderFloat("UV Tiling V",   &params.uvTilingV,    0.1f, 20.0f, d.uvTilingV);
     }
     if (ImGui::CollapsingHeader("Material", ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui::PushID("mat_branch");
-        changed |= drawMaterial(params.material, false);
+        changed |= drawMaterial(params.material, false, d.material);
         ImGui::PopID();
     }
     return changed;
@@ -227,36 +273,37 @@ TwigNode::TwigNode() { type = NodeType::Twig; }
 
 bool TwigNode::drawProperties() {
     bool changed = false;
+    static const TwigParams d;
     // Generation：生成规律
     if (ImGui::CollapsingHeader("Generation", ImGuiTreeNodeFlags_DefaultOpen)) {
-        changed |= ImGui::SliderInt  ("Twig Count",    &params.twigCount,    1, 10);
-        changed |= ImGui::SliderFloat("Rotate Offset", &params.rotateOffset, 0.0f, 360.0f);
-        changed |= ImGui::SliderFloat("Region Start",  &params.regionStart,  0.0f, 1.0f);
-        changed |= ImGui::SliderFloat("Region End",    &params.regionEnd,    0.0f, 1.0f);
+        changed |= rSliderInt  ("Twig Count",    &params.twigCount,    1, 10, d.twigCount);
+        changed |= rSliderFloat("Rotate Offset", &params.rotateOffset, 0.0f, 360.0f, d.rotateOffset);
+        changed |= rSliderFloat("Region Start",  &params.regionStart,  0.0f, 1.0f, d.regionStart);
+        changed |= rSliderFloat("Region End",    &params.regionEnd,    0.0f, 1.0f, d.regionEnd);
         changed |= ImGui::Checkbox   ("Alternating",   &params.alternating);
-        changed |= ImGui::SliderInt  ("Seed",          &params.seed,         0, 999);
-        changed |= ImGui::SliderInt  ("Bone Count",    &params.boneCount,    0, 6);
+        changed |= rSliderInt  ("Seed",          &params.seed,         0, 999, d.seed);
+        changed |= rSliderInt  ("Bone Count",    &params.boneCount,    0, 6, d.boneCount);
     }
     // Spine：单根细枝形态
     if (ImGui::CollapsingHeader("Spine", ImGuiTreeNodeFlags_DefaultOpen)) {
         changed |= sliderFloatVar("Length Ratio", &params.lengthRatio, &params.lengthRatioVar, 0.1f, 1.0f, 0.5f);
         changed |= sliderFloatVar("Radius Scale", &params.radiusScale, &params.radiusScaleVar, 0.1f, 2.0f, 1.0f);
         changed |= sliderFloatVar("End Ratio",    &params.endRatio,    &params.endRatioVar,    0.01f, 1.0f, 0.5f);
-        changed |= ImGui::SliderFloat("Base Flare",     &params.baseFlare,    1.0f, 5.0f);
-        changed |= ImGui::SliderFloat("Taper Power",    &params.taperPow,     0.5f, 4.0f);
+        changed |= rSliderFloat("Base Flare",     &params.baseFlare,    1.0f, 5.0f, d.baseFlare);
+        changed |= rSliderFloat("Taper Power",    &params.taperPow,     0.5f, 4.0f, d.taperPow);
         changed |= sliderFloatVar("Spread Angle", &params.spreadAngle, &params.spreadAngleVar, 10.0f, 90.0f, 45.0f, "%.1f");
         changed |= sliderFloatVar("Gravity",      &params.gravity,     &params.gravityVar,     0.0f, 1.0f, 0.5f);
-        changed |= ImGui::SliderFloat("Noise Amount",   &params.noiseAmount,  0.0f, 90.0f);
-        changed |= ImGui::SliderFloat("Noise Freq",     &params.noiseFreq,    0.5f, 8.0f);
-        changed |= ImGui::SliderFloat("Gnarl",          &params.gnarl,        0.0f, 90.0f);
-        changed |= ImGui::SliderInt  ("Sides",         &params.sides,        3, 8);
-        changed |= ImGui::SliderInt  ("Length Segs",   &params.lengthSegs,   2, 12);
-        changed |= ImGui::SliderFloat("UV Tiling U",   &params.uvTilingU,    0.1f, 20.0f);
-        changed |= ImGui::SliderFloat("UV Tiling V",   &params.uvTilingV,    0.1f, 20.0f);
+        changed |= rSliderFloat("Noise Amount",   &params.noiseAmount,  0.0f, 90.0f, d.noiseAmount);
+        changed |= rSliderFloat("Noise Freq",     &params.noiseFreq,    0.5f, 8.0f, d.noiseFreq);
+        changed |= rSliderFloat("Gnarl",          &params.gnarl,        0.0f, 90.0f, d.gnarl);
+        changed |= rSliderInt  ("Sides",         &params.sides,        3, 8, d.sides);
+        changed |= rSliderInt  ("Length Segs",   &params.lengthSegs,   2, 12, d.lengthSegs);
+        changed |= rSliderFloat("UV Tiling U",   &params.uvTilingU,    0.1f, 20.0f, d.uvTilingU);
+        changed |= rSliderFloat("UV Tiling V",   &params.uvTilingV,    0.1f, 20.0f, d.uvTilingV);
     }
     if (ImGui::CollapsingHeader("Material", ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui::PushID("mat_twig");
-        changed |= drawMaterial(params.material, false);
+        changed |= drawMaterial(params.material, false, d.material);
         ImGui::PopID();
     }
     return changed;
@@ -267,16 +314,17 @@ LeafClusterNode::LeafClusterNode() { type = NodeType::LeafCluster; }
 
 bool LeafClusterNode::drawProperties() {
     bool changed = false;
+    static const LeafClusterParams d;
     if (ImGui::CollapsingHeader("Geometry", ImGuiTreeNodeFlags_DefaultOpen)) {
-        changed |= ImGui::SliderInt  ("Leaf Count",     &params.leafCount,     4, 64);
-        changed |= ImGui::SliderFloat("Cluster Radius", &params.clusterRadius, 0.05f, 1.0f);
-        changed |= ImGui::SliderFloat("Leaf Size",      &params.leafSize,      0.02f, 0.8f);
-        changed |= ImGui::SliderFloat("Leaf Aspect",    &params.leafAspect,    0.1f, 1.5f);
-        changed |= ImGui::SliderFloat("Normal Jitter",  &params.normalJitter,  0.0f, 1.0f);
-        changed |= ImGui::SliderFloat("Normal Soften",  &params.normalSoften,  0.0f, 1.0f);
+        changed |= rSliderInt  ("Leaf Count",     &params.leafCount,     4, 64, d.leafCount);
+        changed |= rSliderFloat("Cluster Radius", &params.clusterRadius, 0.05f, 1.0f, d.clusterRadius);
+        changed |= rSliderFloat("Leaf Size",      &params.leafSize,      0.02f, 0.8f, d.leafSize);
+        changed |= rSliderFloat("Leaf Aspect",    &params.leafAspect,    0.1f, 1.5f, d.leafAspect);
+        changed |= rSliderFloat("Normal Jitter",  &params.normalJitter,  0.0f, 1.0f, d.normalJitter);
+        changed |= rSliderFloat("Normal Soften",  &params.normalSoften,  0.0f, 1.0f, d.normalSoften);
         changed |= ImGui::Checkbox   ("Planar (fern)",  &params.planar);
-        changed |= ImGui::SliderFloat("Size Falloff",   &params.sizeFalloff,   0.0f, 1.0f);
-        changed |= ImGui::SliderInt  ("Seed",           &params.seed,          0, 999);
+        changed |= rSliderFloat("Size Falloff",   &params.sizeFalloff,   0.0f, 1.0f, d.sizeFalloff);
+        changed |= rSliderInt  ("Seed",           &params.seed,          0, 999, d.seed);
     }
     if (ImGui::CollapsingHeader("Cutout Mesh", ImGuiTreeNodeFlags_DefaultOpen)) {
         // 轮廓裁剪网格: 用贴合剪影的三角网格代替四边形卡片, 降低透明像素 overdraw。
@@ -288,7 +336,7 @@ bool LeafClusterNode::drawProperties() {
     }
     if (ImGui::CollapsingHeader("Material", ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui::PushID("mat_leaf");
-        changed |= drawMaterial(params.material, true);  // SSS for leaves
+        changed |= drawMaterial(params.material, true, d.material);  // SSS for leaves
         ImGui::PopID();
     }
     return changed;
@@ -299,35 +347,36 @@ RootsNode::RootsNode() { type = NodeType::Roots; }
 
 bool RootsNode::drawProperties() {
     bool changed = false;
+    static const RootsParams d;
     // Generation：生成规律 —— 根条数、方位分布
     if (ImGui::CollapsingHeader("Generation", ImGuiTreeNodeFlags_DefaultOpen)) {
-        changed |= ImGui::SliderInt  ("Root Count",    &params.rootCount,    1, 16);
-        changed |= ImGui::SliderFloat("Rotate Offset", &params.rotateOffset, 0.0f, 360.0f);
-        changed |= ImGui::SliderInt  ("Seed",          &params.seed,         0, 999);
+        changed |= rSliderInt  ("Root Count",    &params.rootCount,    1, 16, d.rootCount);
+        changed |= rSliderFloat("Rotate Offset", &params.rotateOffset, 0.0f, 360.0f, d.rotateOffset);
+        changed |= rSliderInt  ("Seed",          &params.seed,         0, 999, d.seed);
     }
     // Spine：单根根系形态 —— 长度、粗细、张开、下扎
     if (ImGui::CollapsingHeader("Spine", ImGuiTreeNodeFlags_DefaultOpen)) {
         changed |= sliderFloatVar("Length",      &params.length,      &params.lengthVar,      0.5f, 10.0f, 3.0f, "%.2f");
         changed |= sliderFloatVar("Radius Scale",&params.radiusScale, &params.radiusScaleVar, 0.1f, 2.0f, 1.0f);
         changed |= sliderFloatVar("End Ratio",   &params.endRatio,    &params.endRatioVar,    0.01f, 0.5f, 0.25f);
-        changed |= ImGui::SliderFloat("Taper Power",  &params.taperPow,    0.5f, 4.0f);
-        changed |= ImGui::SliderFloat("Base Flare",   &params.baseFlare,   1.0f, 5.0f);
-        changed |= ImGui::SliderFloat("Collar Sink",  &params.collarSink,  0.0f, 0.8f);
+        changed |= rSliderFloat("Taper Power",  &params.taperPow,    0.5f, 4.0f, d.taperPow);
+        changed |= rSliderFloat("Base Flare",   &params.baseFlare,   1.0f, 5.0f, d.baseFlare);
+        changed |= rSliderFloat("Collar Sink",  &params.collarSink,  0.0f, 0.8f, d.collarSink);
         changed |= sliderFloatVar("Spread Angle",&params.spreadAngle, &params.spreadAngleVar, 30.0f, 150.0f, 45.0f, "%.1f");
         changed |= sliderFloatVar("Gravity",     &params.gravity,     &params.gravityVar,     0.0f, 1.0f, 0.5f);
-        changed |= ImGui::SliderFloat("Noise Amount", &params.noiseAmount, 0.0f, 90.0f);
-        changed |= ImGui::SliderFloat("Noise Freq",   &params.noiseFreq,   0.5f, 8.0f);
-        changed |= ImGui::SliderFloat("Gnarl",        &params.gnarl,       0.0f, 90.0f);
-        changed |= ImGui::SliderInt  ("Joint Count",  &params.jointCount,  0, 20);
-        changed |= ImGui::SliderFloat("Joint Bulge",  &params.jointBulge,  0.0f, 1.0f);
-        changed |= ImGui::SliderInt  ("Sides",        &params.sides,       3, 12);
-        changed |= ImGui::SliderInt  ("Length Segs",  &params.lengthSegs,  2, 20);
-        changed |= ImGui::SliderFloat("UV Tiling U",  &params.uvTilingU,   0.1f, 20.0f);
-        changed |= ImGui::SliderFloat("UV Tiling V",  &params.uvTilingV,   0.1f, 20.0f);
+        changed |= rSliderFloat("Noise Amount", &params.noiseAmount, 0.0f, 90.0f, d.noiseAmount);
+        changed |= rSliderFloat("Noise Freq",   &params.noiseFreq,   0.5f, 8.0f, d.noiseFreq);
+        changed |= rSliderFloat("Gnarl",        &params.gnarl,       0.0f, 90.0f, d.gnarl);
+        changed |= rSliderInt  ("Joint Count",  &params.jointCount,  0, 20, d.jointCount);
+        changed |= rSliderFloat("Joint Bulge",  &params.jointBulge,  0.0f, 1.0f, d.jointBulge);
+        changed |= rSliderInt  ("Sides",        &params.sides,       3, 12, d.sides);
+        changed |= rSliderInt  ("Length Segs",  &params.lengthSegs,  2, 20, d.lengthSegs);
+        changed |= rSliderFloat("UV Tiling U",  &params.uvTilingU,   0.1f, 20.0f, d.uvTilingU);
+        changed |= rSliderFloat("UV Tiling V",  &params.uvTilingV,   0.1f, 20.0f, d.uvTilingV);
     }
     if (ImGui::CollapsingHeader("Material", ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui::PushID("mat_roots");
-        changed |= drawMaterial(params.material, false);
+        changed |= drawMaterial(params.material, false, d.material);
         ImGui::PopID();
     }
     return changed;
@@ -338,34 +387,35 @@ SpineNode::SpineNode() { type = NodeType::Spine; }
 
 bool SpineNode::drawProperties() {
     bool changed = false;
+    static const SpineParams d;
     // Generation：叶轴条数、方位分布
     if (ImGui::CollapsingHeader("Generation", ImGuiTreeNodeFlags_DefaultOpen)) {
-        changed |= ImGui::SliderInt  ("Spine Count",   &params.spineCount,   1, 12);
-        changed |= ImGui::SliderFloat("Rotate Offset", &params.rotateOffset, 0.0f, 360.0f);
-        changed |= ImGui::SliderFloat("Region Start",  &params.regionStart,  0.0f, 1.0f);
-        changed |= ImGui::SliderFloat("Region End",    &params.regionEnd,    0.0f, 1.0f);
-        changed |= ImGui::SliderInt  ("Seed",          &params.seed,         0, 999);
+        changed |= rSliderInt  ("Spine Count",   &params.spineCount,   1, 12, d.spineCount);
+        changed |= rSliderFloat("Rotate Offset", &params.rotateOffset, 0.0f, 360.0f, d.rotateOffset);
+        changed |= rSliderFloat("Region Start",  &params.regionStart,  0.0f, 1.0f, d.regionStart);
+        changed |= rSliderFloat("Region End",    &params.regionEnd,    0.0f, 1.0f, d.regionEnd);
+        changed |= rSliderInt  ("Seed",          &params.seed,         0, 999, d.seed);
     }
     // Spine：单条叶轴形态
     if (ImGui::CollapsingHeader("Spine", ImGuiTreeNodeFlags_DefaultOpen)) {
         changed |= sliderFloatVar("Length Ratio", &params.lengthRatio, &params.lengthRatioVar, 0.1f, 1.5f, 0.5f);
         changed |= sliderFloatVar("Radius Scale", &params.radiusScale, &params.radiusScaleVar, 0.05f, 1.0f, 0.5f);
         changed |= sliderFloatVar("End Ratio",    &params.endRatio,    &params.endRatioVar,    0.01f, 1.0f, 0.5f);
-        changed |= ImGui::SliderFloat("Taper Power",   &params.taperPow,     0.5f, 4.0f);
+        changed |= rSliderFloat("Taper Power",   &params.taperPow,     0.5f, 4.0f, d.taperPow);
         changed |= sliderFloatVar("Spread Angle", &params.spreadAngle, &params.spreadAngleVar, 10.0f, 90.0f, 45.0f, "%.1f");
         changed |= sliderFloatVar("Gravity",      &params.gravity,     &params.gravityVar,     0.0f, 1.0f, 0.5f);
-        changed |= ImGui::SliderFloat("Noise Amount",  &params.noiseAmount,  0.0f, 90.0f);
-        changed |= ImGui::SliderFloat("Noise Freq",    &params.noiseFreq,    0.5f, 8.0f);
-        changed |= ImGui::SliderFloat("Gnarl",         &params.gnarl,        0.0f, 90.0f);
-        changed |= ImGui::SliderInt  ("Sides",         &params.sides,        3, 10);
-        changed |= ImGui::SliderInt  ("Length Segs",   &params.lengthSegs,   3, 24);
-        changed |= ImGui::SliderFloat("UV Tiling U",   &params.uvTilingU,    0.1f, 10.0f);
-        changed |= ImGui::SliderFloat("UV Tiling V",   &params.uvTilingV,    0.1f, 10.0f);
-        changed |= ImGui::SliderInt  ("Bone Count",    &params.boneCount,    0, 6);
+        changed |= rSliderFloat("Noise Amount",  &params.noiseAmount,  0.0f, 90.0f, d.noiseAmount);
+        changed |= rSliderFloat("Noise Freq",    &params.noiseFreq,    0.5f, 8.0f, d.noiseFreq);
+        changed |= rSliderFloat("Gnarl",         &params.gnarl,        0.0f, 90.0f, d.gnarl);
+        changed |= rSliderInt  ("Sides",         &params.sides,        3, 10, d.sides);
+        changed |= rSliderInt  ("Length Segs",   &params.lengthSegs,   3, 24, d.lengthSegs);
+        changed |= rSliderFloat("UV Tiling U",   &params.uvTilingU,    0.1f, 10.0f, d.uvTilingU);
+        changed |= rSliderFloat("UV Tiling V",   &params.uvTilingV,    0.1f, 10.0f, d.uvTilingV);
+        changed |= rSliderInt  ("Bone Count",    &params.boneCount,    0, 6, d.boneCount);
     }
     if (ImGui::CollapsingHeader("Material", ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui::PushID("mat_spine");
-        changed |= drawMaterial(params.material, false);
+        changed |= drawMaterial(params.material, false, d.material);
         ImGui::PopID();
     }
     return changed;
@@ -376,16 +426,17 @@ FrondNode::FrondNode() { type = NodeType::Frond; }
 
 bool FrondNode::drawProperties() {
     bool changed = false;
+    static const FrondParams d;
     if (ImGui::CollapsingHeader("Shape", ImGuiTreeNodeFlags_DefaultOpen)) {
-        changed |= ImGui::SliderFloat("Width",        &params.width,        0.02f, 2.0f);
-        changed |= ImGui::SliderFloat("Width Base",   &params.widthBase,    0.0f, 1.0f);
-        changed |= ImGui::SliderFloat("Width Tip",    &params.widthTip,     0.0f, 1.0f);
-        changed |= ImGui::SliderFloat("Profile Power",&params.profilePow,   0.2f, 3.0f);
-        changed |= ImGui::SliderFloat("Curl",         &params.curl,         -1.0f, 1.0f);
-        changed |= ImGui::SliderInt  ("Segs Per Side",&params.segsPerSide,  1, 6);
+        changed |= rSliderFloat("Width",        &params.width,        0.02f, 2.0f, d.width);
+        changed |= rSliderFloat("Width Base",   &params.widthBase,    0.0f, 1.0f, d.widthBase);
+        changed |= rSliderFloat("Width Tip",    &params.widthTip,     0.0f, 1.0f, d.widthTip);
+        changed |= rSliderFloat("Profile Power",&params.profilePow,   0.2f, 3.0f, d.profilePow);
+        changed |= rSliderFloat("Curl",         &params.curl,         -1.0f, 1.0f, d.curl);
+        changed |= rSliderInt  ("Segs Per Side",&params.segsPerSide,  1, 6, d.segsPerSide);
         changed |= ImGui::Checkbox   ("Serrate",      &params.serrate);
-        changed |= ImGui::SliderFloat("Serrate Depth",&params.serrateDepth, 0.0f, 0.8f);
-        changed |= ImGui::SliderInt  ("Seed",         &params.seed,         0, 999);
+        changed |= rSliderFloat("Serrate Depth",&params.serrateDepth, 0.0f, 0.8f, d.serrateDepth);
+        changed |= rSliderInt  ("Seed",         &params.seed,         0, 999, d.seed);
     }
     if (ImGui::CollapsingHeader("Cutout Mesh", ImGuiTreeNodeFlags_DefaultOpen)) {
         // 轮廓裁剪网格: 用贴合剪影的三角网格代替整片叶带矩形, 降低透明像素 overdraw。
@@ -397,7 +448,7 @@ bool FrondNode::drawProperties() {
     }
     if (ImGui::CollapsingHeader("Material", ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui::PushID("mat_frond");
-        changed |= drawMaterial(params.material, true);  // SSS for leaves
+        changed |= drawMaterial(params.material, true, d.material);  // SSS for leaves
         ImGui::PopID();
     }
     return changed;
@@ -490,6 +541,7 @@ CustomNode::CustomNode() {
 
 bool CustomNode::drawProperties() {
     bool changed = false;
+    static const CustomParams d;
     if (params.script.empty()) params.script = kDefaultCustomScript;
 
     if (ImGui::CollapsingHeader("Script (Lua)", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -528,23 +580,23 @@ bool CustomNode::drawProperties() {
 
     // Geometry：单根枝条的截面/锥度/扰动/风格(脚本只给逻辑, 这里控形态)
     if (ImGui::CollapsingHeader("Geometry", ImGuiTreeNodeFlags_DefaultOpen)) {
-        changed |= ImGui::SliderInt  ("Count",        &params.count,       0, 200);
-        changed |= ImGui::SliderFloat("Base Flare",   &params.baseFlare,   1.0f, 5.0f);
-        changed |= ImGui::SliderFloat("Taper Power",  &params.taperPow,    0.5f, 4.0f);
-        changed |= ImGui::SliderFloat("Gravity",      &params.gravity,     0.0f, 1.0f);
-        changed |= ImGui::SliderFloat("Noise Amount", &params.noiseAmount, 0.0f, 90.0f);
-        changed |= ImGui::SliderFloat("Noise Freq",   &params.noiseFreq,   0.5f, 8.0f);
-        changed |= ImGui::SliderFloat("Gnarl",        &params.gnarl,       0.0f, 90.0f);
-        changed |= ImGui::SliderInt  ("Sides",        &params.sides,       3, 12);
-        changed |= ImGui::SliderInt  ("Length Segs",  &params.lengthSegs,  2, 16);
-        changed |= ImGui::SliderFloat("UV Tiling U",  &params.uvTilingU,   0.1f, 20.0f);
-        changed |= ImGui::SliderFloat("UV Tiling V",  &params.uvTilingV,   0.1f, 20.0f);
-        changed |= ImGui::SliderInt  ("Seed",         &params.seed,        0, 999);
-        changed |= ImGui::SliderInt  ("Bone Count",   &params.boneCount,   0, 8);
+        changed |= rSliderInt  ("Count",        &params.count,       0, 200, d.count);
+        changed |= rSliderFloat("Base Flare",   &params.baseFlare,   1.0f, 5.0f, d.baseFlare);
+        changed |= rSliderFloat("Taper Power",  &params.taperPow,    0.5f, 4.0f, d.taperPow);
+        changed |= rSliderFloat("Gravity",      &params.gravity,     0.0f, 1.0f, d.gravity);
+        changed |= rSliderFloat("Noise Amount", &params.noiseAmount, 0.0f, 90.0f, d.noiseAmount);
+        changed |= rSliderFloat("Noise Freq",   &params.noiseFreq,   0.5f, 8.0f, d.noiseFreq);
+        changed |= rSliderFloat("Gnarl",        &params.gnarl,       0.0f, 90.0f, d.gnarl);
+        changed |= rSliderInt  ("Sides",        &params.sides,       3, 12, d.sides);
+        changed |= rSliderInt  ("Length Segs",  &params.lengthSegs,  2, 16, d.lengthSegs);
+        changed |= rSliderFloat("UV Tiling U",  &params.uvTilingU,   0.1f, 20.0f, d.uvTilingU);
+        changed |= rSliderFloat("UV Tiling V",  &params.uvTilingV,   0.1f, 20.0f, d.uvTilingV);
+        changed |= rSliderInt  ("Seed",         &params.seed,        0, 999, d.seed);
+        changed |= rSliderInt  ("Bone Count",   &params.boneCount,   0, 8, d.boneCount);
     }
     if (ImGui::CollapsingHeader("Material", ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui::PushID("mat_custom");
-        changed |= drawMaterial(params.material, false);
+        changed |= drawMaterial(params.material, false, d.material);
         ImGui::PopID();
     }
     return changed;
@@ -591,6 +643,7 @@ ImportTrunkNode::ImportTrunkNode() { type = NodeType::ImportTrunk; }
 
 bool ImportTrunkNode::drawProperties() {
     bool changed = false;
+    static const ImportTrunkParams d;
     if (ImGui::CollapsingHeader("Import", ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui::TextWrapped("导入 SpeedTree 带骨骼枝干 FBX, 作为一株的根。骨骼链会换算成"
                            "附着环供下游 Scatter 沿其撒叶。");
@@ -599,13 +652,13 @@ bool ImportTrunkNode::drawProperties() {
                                   params.loadError, params.cached);
     }
     if (ImGui::CollapsingHeader("Transform", ImGuiTreeNodeFlags_DefaultOpen)) {
-        changed |= ImGui::SliderFloat("Scale", &params.scale, 0.01f, 10.0f);
-        changed |= ImGui::SliderFloat("Pos X", &params.posX, -20.0f, 20.0f);
-        changed |= ImGui::SliderFloat("Pos Z", &params.posZ, -20.0f, 20.0f);
+        changed |= rSliderFloat("Scale", &params.scale, 0.01f, 10.0f, d.scale);
+        changed |= rSliderFloat("Pos X", &params.posX, -20.0f, 20.0f, d.posX);
+        changed |= rSliderFloat("Pos Z", &params.posZ, -20.0f, 20.0f, d.posZ);
     }
     if (ImGui::CollapsingHeader("Material", ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui::PushID("mat_impTrunk");
-        changed |= drawMaterial(params.material, false);
+        changed |= drawMaterial(params.material, false, d.material);
         ImGui::PopID();
     }
     return changed;
@@ -616,6 +669,7 @@ ImportLeafNode::ImportLeafNode() { type = NodeType::ImportLeaf; }
 
 bool ImportLeafNode::drawProperties() {
     bool changed = false;
+    static const ImportLeafParams d;
     if (ImGui::CollapsingHeader("Import", ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui::TextWrapped("导入枝叶单体 FBX(一小片叶网格), 用于预览。散布请用 Scatter 节点。");
         ImGui::Spacing();
@@ -623,11 +677,11 @@ bool ImportLeafNode::drawProperties() {
                                   params.loadError, params.cached);
     }
     if (ImGui::CollapsingHeader("Transform", ImGuiTreeNodeFlags_DefaultOpen)) {
-        changed |= ImGui::SliderFloat("Scale", &params.scale, 0.01f, 10.0f);
+        changed |= rSliderFloat("Scale", &params.scale, 0.01f, 10.0f, d.scale);
     }
     if (ImGui::CollapsingHeader("Material", ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui::PushID("mat_impLeaf");
-        changed |= drawMaterial(params.material, true);
+        changed |= drawMaterial(params.material, true, d.material);
         ImGui::PopID();
     }
     return changed;
@@ -638,6 +692,7 @@ ScatterNode::ScatterNode() { type = NodeType::Scatter; }
 
 bool ScatterNode::drawProperties() {
     bool changed = false;
+    static const ScatterParams d;
     if (ImGui::CollapsingHeader("Leaf Prototype Variants", ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui::TextWrapped("导入一个或多个叶原型变体(实例枝)。在父级(ImportTrunk)骨骼的每根末端"
                            "细枝上撒 Count 片叶, 每片均匀随机选取一个变体。导出 USD 时每个变体"
@@ -697,22 +752,23 @@ bool ScatterNode::drawProperties() {
             changed = true;
         }
         if (params.distribution == ScatterParams::Distribution::EvenStep)
-            changed |= ImGui::SliderFloat("Even Spacing", &params.evenSpacing, 0.02f, 0.5f);
+            changed |= rSliderFloat("Even Spacing", &params.evenSpacing, 0.02f, 0.5f, d.evenSpacing);
         else
-            changed |= ImGui::SliderInt  ("Count/Twig",    &params.count,        1, 30);
-        changed |= ImGui::SliderFloat("Leaf Scale",    &params.leafScale,    0.05f, 5.0f);
-        changed |= ImGui::SliderFloat("Scale Var",     &params.leafScaleVar, 0.0f, 2.0f);
-        changed |= ImGui::SliderFloat("Region Start",  &params.regionStart,  0.0f, 1.0f);
-        changed |= ImGui::SliderFloat("Region End",    &params.regionEnd,    0.0f, 1.0f);
-        changed |= ImGui::SliderFloat("Spread Angle",  &params.spreadAngle,  0.0f, 90.0f);
-        changed |= ImGui::SliderFloat("Spiral Step",   &params.spiralStep,   0.0f, 360.0f);
-        changed |= ImGui::SliderFloat("Tip Scale",     &params.tipScale,     0.05f, 3.0f);
-        changed |= ImGui::SliderFloat("Normal Jitter", &params.normalJitter, 0.0f, 1.0f);
-        changed |= ImGui::SliderInt  ("Seed",          &params.seed,         0, 9999);
+            changed |= rSliderInt  ("Count/Twig",    &params.count,        1, 30, d.count);
+        changed |= rSliderFloat("Leaf Scale",    &params.leafScale,    0.05f, 5.0f, d.leafScale);
+        changed |= rSliderFloat("Scale Var",     &params.leafScaleVar, 0.0f, 2.0f, d.leafScaleVar);
+        changed |= rSliderFloat("Region Start",  &params.regionStart,  0.0f, 1.0f, d.regionStart);
+        changed |= rSliderFloat("Region End",    &params.regionEnd,    0.0f, 1.0f, d.regionEnd);
+        changed |= rSliderFloat("Spread Angle",  &params.spreadAngle,  0.0f, 90.0f, d.spreadAngle);
+        changed |= rSliderFloat("Tuck",          &params.tuck,         0.0f, 1.0f, d.tuck);
+        changed |= rSliderFloat("Spiral Step",   &params.spiralStep,   0.0f, 360.0f, d.spiralStep);
+        changed |= rSliderFloat("Tip Scale",     &params.tipScale,     0.05f, 3.0f, d.tipScale);
+        changed |= rSliderFloat("Normal Jitter", &params.normalJitter, 0.0f, 1.0f, d.normalJitter);
+        changed |= rSliderInt  ("Seed",          &params.seed,         0, 9999, d.seed);
     }
     if (ImGui::CollapsingHeader("Material", ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui::PushID("mat_scatter");
-        changed |= drawMaterial(params.material, true);
+        changed |= drawMaterial(params.material, true, d.material);
         ImGui::PopID();
     }
     return changed;
