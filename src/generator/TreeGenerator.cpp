@@ -54,6 +54,48 @@ void TreeGenerator::sampleRings(const std::vector<BranchRing>& rings, float t,
     outRadius = glm::mix(rings[lo].radius, rings[hi].radius, frac);
 }
 
+// 沿 rings 中心线生成一条骨链: boneCount 段 → boneCount+1 个关节。
+// 关节 0 在基部(t=0), 父接到"父枝骨范围内离基部最近的骨"(无父范围则 parent=-1=根)。
+// 其余关节沿 t=i/boneCount 均布, 依次首尾相连。结果追加进 m_out->skeleton。
+// outBase/outCount 回传新范围, 供调用者设为子节点的父骨范围(m_parentBoneBase/Count)。
+void TreeGenerator::emitBoneChain(const std::vector<BranchRing>& rings, int boneCount,
+                                  int simGroup, const std::string& name,
+                                  int& outBase, int& outCount) {
+    outBase = -1; outCount = 0;
+    if (!m_out || rings.size() < 2) return;
+    // 该节点不绑骨(boneCount<=0): 不产出骨, 但把祖先父骨范围原样回传,
+    // 使子节点仍挂到祖先骨上(骨链不断裂), 从而实现"逐节点关闭绑骨"。
+    if (boneCount <= 0) { outBase = m_parentBoneBase; outCount = m_parentBoneCount; return; }
+    int segs = boneCount;
+
+    glm::vec3 basePos = rings.front().center;
+    // 首关节的父骨: 父范围内离基部最近者(按 3D 距离)。
+    int parentOfFirst = -1;
+    if (m_parentBoneCount > 0 && m_parentBoneBase >= 0) {
+        float best = 1e30f;
+        for (int b = m_parentBoneBase; b < m_parentBoneBase + m_parentBoneCount &&
+                                       b < (int)m_out->skeleton.size(); ++b) {
+            float d = glm::distance(m_out->skeleton[b].pos, basePos);
+            if (d < best) { best = d; parentOfFirst = b; }
+        }
+    }
+
+    int base = (int)m_out->skeleton.size();
+    for (int i = 0; i <= segs; ++i) {
+        float t = (float)i / (float)segs;
+        glm::vec3 pos, dir, right; float rad;
+        sampleRings(rings, t, pos, dir, right, rad);
+        TreeMeshData::SkelBone bone;
+        bone.pos      = pos;
+        bone.parent   = (i == 0) ? parentOfFirst : (base + i - 1);
+        bone.name     = name + "_" + std::to_string(i);
+        bone.simGroup = simGroup;
+        m_out->skeleton.push_back(bone);
+    }
+    outBase = base;
+    outCount = segs + 1;
+}
+
 MeshBatch& TreeGenerator::getBatch(const MaterialParams& mat, bool isLeaf, bool instanced) {
     // 归并键必须涵盖全部影响渲染的材质字段：仅比 albedo 会把 albedo 相同但
     // roughness/metallic/贴图等不同的材质错误合并，导致调一个节点的粗糙度
@@ -457,10 +499,19 @@ void TreeGenerator::processNode(
 
     switch (node->getType()) {
     case NodeType::Trunk: {
-        auto rings = buildTrunk(static_cast<const TrunkNode*>(node), origin, dir);
-        float trunkLen = static_cast<const TrunkNode*>(node)->params.length;
+        const auto* tn = static_cast<const TrunkNode*>(node);
+        auto rings = buildTrunk(tn, origin, dir);
+        float trunkLen = tn->params.length;
+        // 绑骨(方案A): 沿主干 rings 生成骨链(simGroup=0 树干), 作为子枝骨的父范围。
+        int prevBase = m_parentBoneBase, prevCount = m_parentBoneCount;
+        int myBase, myCount;
+        emitBoneChain(rings, tn->params.boneCount, 0,
+                      std::string(node->getLabel()) + std::to_string(node->id),
+                      myBase, myCount);
+        m_parentBoneBase = myBase; m_parentBoneCount = myCount;
         for (auto* child : graph.childrenOf(node->id))
             processNode(graph, child, &rings, origin, dir, trunkLen, depth+1);
+        m_parentBoneBase = prevBase; m_parentBoneCount = prevCount;
         break;
     }
     case NodeType::Branch:
@@ -632,12 +683,19 @@ void TreeGenerator::buildBranches(
         afterAppend(batch, hlV, hlI);
         glm::vec3 tip    = rings.empty() ? glm::vec3(0,thisLen,0) : rings.back().center;
         glm::vec3 tipDir = rings.empty() ? glm::vec3(0,1,0)       : rings.back().up;
+        int prevBase = m_parentBoneBase, prevCount = m_parentBoneCount;
+        int myBase, myCount;
+        emitBoneChain(rings, p.boneCount, 1,
+                      std::string(node->getLabel()) + std::to_string(node->id),
+                      myBase, myCount);
+        m_parentBoneBase = myBase; m_parentBoneCount = myCount;
         for (auto* child : graph.childrenOf(node->id)) {
             if (child->getType() == NodeType::LeafCluster)
                 processNode(graph, child, &rings, tip, tipDir, thisLen, depth+1);
             else
                 processNode(graph, child, &rings, {0,0,0}, {0,1,0}, thisLen, depth+1);
         }
+        m_parentBoneBase = prevBase; m_parentBoneCount = prevCount;
         return;
     }
 
@@ -732,6 +790,12 @@ void TreeGenerator::buildBranches(
         glm::vec3 tip      = rings.empty() ? surfacePos + branchDir * thisLen : rings.back().center;
         glm::vec3 tipDir   = rings.empty() ? branchDir : rings.back().up;
 
+        int prevBase = m_parentBoneBase, prevCount = m_parentBoneCount;
+        int myBase, myCount;
+        emitBoneChain(rings, p.boneCount, 1,
+                      std::string(node->getLabel()) + std::to_string(node->id),
+                      myBase, myCount);
+        m_parentBoneBase = myBase; m_parentBoneCount = myCount;
         for (auto* child : graph.childrenOf(node->id)) {
             if (child->getType() == NodeType::LeafCluster)
                 // 叶簇沿整根枝条均匀生长：把本枝 rings 传下去
@@ -739,6 +803,7 @@ void TreeGenerator::buildBranches(
             else
                 processNode(graph, child, &rings, attachPos, branchDir, thisLen, depth+1);
         }
+        m_parentBoneBase = prevBase; m_parentBoneCount = prevCount;
         if (m_chainMode) break;   // 祖先链模式: 只长一根链上代表实例
     }
 }
@@ -841,6 +906,12 @@ void TreeGenerator::buildCustom(
         // 子节点从枝条末端出发
         glm::vec3 tip    = rings.empty() ? surfacePos + branchDir * thisLen : rings.back().center;
         glm::vec3 tipDir = rings.empty() ? branchDir : rings.back().up;
+        int prevBase = m_parentBoneBase, prevCount = m_parentBoneCount;
+        int myBase, myCount;
+        emitBoneChain(rings, p.boneCount, 1,
+                      std::string(node->getLabel()) + std::to_string(node->id),
+                      myBase, myCount);
+        m_parentBoneBase = myBase; m_parentBoneCount = myCount;
         for (auto* child : graph.childrenOf(node->id)) {
             if (child->getType() == NodeType::LeafCluster)
                 processNode(graph, child, &rings, tip, tipDir, thisLen, depth+1);
@@ -849,6 +920,7 @@ void TreeGenerator::buildCustom(
                             specimen ? glm::vec3(0,0,0) : attachPos,
                             specimen ? glm::vec3(0,1,0) : branchDir, thisLen, depth+1);
         }
+        m_parentBoneBase = prevBase; m_parentBoneCount = prevCount;
 
         if (specimen) break;         // 标本: 只长一根
         if (m_chainMode) break;      // 祖先链模式: 只长一根代表实例
@@ -881,12 +953,19 @@ void TreeGenerator::buildTwig(
         afterAppend(batch, hlV, hlI);
         glm::vec3 tip    = rings.empty() ? glm::vec3(0,thisLen,0) : rings.back().center;
         glm::vec3 tipDir = rings.empty() ? glm::vec3(0,1,0)       : rings.back().up;
+        int prevBase = m_parentBoneBase, prevCount = m_parentBoneCount;
+        int myBase, myCount;
+        emitBoneChain(rings, p.boneCount, 2,
+                      std::string(node->getLabel()) + std::to_string(node->id),
+                      myBase, myCount);
+        m_parentBoneBase = myBase; m_parentBoneCount = myCount;
         for (auto* child : graph.childrenOf(node->id)) {
             if (child->getType() == NodeType::LeafCluster)
                 processNode(graph, child, &rings, tip, tipDir, thisLen, depth+1);
             else
                 processNode(graph, child, &rings, {0,0,0}, {0,1,0}, thisLen, depth+1);
         }
+        m_parentBoneBase = prevBase; m_parentBoneCount = prevCount;
         return;
     }
 
@@ -954,6 +1033,12 @@ void TreeGenerator::buildTwig(
         glm::vec3 tip    = rings.empty() ? surfacePos + twigDir * thisLen : rings.back().center;
         glm::vec3 tipDir = rings.empty() ? twigDir : rings.back().up;
 
+        int prevBase = m_parentBoneBase, prevCount = m_parentBoneCount;
+        int myBase, myCount;
+        emitBoneChain(rings, p.boneCount, 2,
+                      std::string(node->getLabel()) + std::to_string(node->id),
+                      myBase, myCount);
+        m_parentBoneBase = myBase; m_parentBoneCount = myCount;
         for (auto* child : graph.childrenOf(node->id)) {
             if (child->getType() == NodeType::LeafCluster)
                 // 叶簇沿整根细枝均匀生长：把本枝 rings 传下去
@@ -961,6 +1046,7 @@ void TreeGenerator::buildTwig(
             else
                 processNode(graph, child, &rings, attachPos, twigDir, thisLen, depth+1);
         }
+        m_parentBoneBase = prevBase; m_parentBoneCount = prevCount;
         if (m_chainMode) break;   // 祖先链模式: 只长一根链上代表实例
     }
 }
@@ -1196,8 +1282,15 @@ void TreeGenerator::buildSpine(
         afterAppend(batch, hlV, hlI);
         glm::vec3 tip    = rings.empty() ? glm::vec3(0,thisLen,0) : rings.back().center;
         glm::vec3 tipDir = rings.empty() ? glm::vec3(0,1,0)       : rings.back().up;
+        int prevBase = m_parentBoneBase, prevCount = m_parentBoneCount;
+        int myBase, myCount;
+        emitBoneChain(rings, p.boneCount, 2,
+                      std::string(node->getLabel()) + std::to_string(node->id),
+                      myBase, myCount);
+        m_parentBoneBase = myBase; m_parentBoneCount = myCount;
         for (auto* child : graph.childrenOf(node->id))
             processNode(graph, child, &rings, tip, tipDir, thisLen, depth+1);
+        m_parentBoneBase = prevBase; m_parentBoneCount = prevCount;
         return;
     }
 
@@ -1255,8 +1348,15 @@ void TreeGenerator::buildSpine(
         // Frond 子节点沿整条叶轴 rings 铺叶带
         glm::vec3 tip    = rings.empty() ? surfacePos + spineDir * thisLen : rings.back().center;
         glm::vec3 tipDir = rings.empty() ? spineDir : rings.back().up;
+        int prevBase = m_parentBoneBase, prevCount = m_parentBoneCount;
+        int myBase, myCount;
+        emitBoneChain(rings, p.boneCount, 2,
+                      std::string(node->getLabel()) + std::to_string(node->id),
+                      myBase, myCount);
+        m_parentBoneBase = myBase; m_parentBoneCount = myCount;
         for (auto* child : graph.childrenOf(node->id))
             processNode(graph, child, &rings, tip, tipDir, thisLen, depth+1);
+        m_parentBoneBase = prevBase; m_parentBoneCount = prevCount;
         if (m_chainMode) break;   // 祖先链模式: 只长一根链上代表实例
     }
 }

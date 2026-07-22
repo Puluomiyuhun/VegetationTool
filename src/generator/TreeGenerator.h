@@ -57,6 +57,19 @@ private:
     float         m_windW = 0.0f;     // 该节点枝条风力基权重(尖端处再乘 tRing)
     float         m_windPhase = 0.0f; // 该节点相位偏移(按节点 id 哈希, 令相邻枝条不同步)
 
+    // ---- 原生绑骨(方案A: 只出骨架, 暂不蒙皮) ----
+    // 每个枝干节点沿其 rings 生成一条骨链(boneCount 根骨), 首骨父接到"父枝链中离本枝
+    // 基部最近的骨"。递归子节点前把 m_parentBoneBase/Count 指向本枝刚生成的骨范围。
+    // 结果写入 m_out->skeleton, 供视口 Skeleton 可视化。
+    int m_parentBoneBase  = -1;   // 父枝骨范围起始索引(-1=无父/根)
+    int m_parentBoneCount = 0;    // 父枝骨范围数量
+    // 沿 rings 生成 boneCount 根骨(至少 1), simGroup=风力仿真组, 返回新骨范围 [base,base+cnt)。
+    // 首骨父 = 父范围内离 rings 基部最近的骨(无父范围则首骨 parent=-1 且额外含基部根骨)。
+    // outBase/outCount 回传新范围, 供调用者设置为子节点的父范围。
+    void emitBoneChain(const std::vector<BranchRing>& rings, int boneCount,
+                       int simGroup, const std::string& name,
+                       int& outBase, int& outCount);
+
     MeshBatch& getBatch(const MaterialParams& mat, bool isLeaf, bool instanced = false);
 
     // 方案B 标本测量: 在真实整株里跑一遍, 捕获 targetId 首个实例的父级长度/附着半径,

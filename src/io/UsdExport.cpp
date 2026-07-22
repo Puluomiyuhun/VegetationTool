@@ -453,8 +453,10 @@ static bool exportSkeletalUSD(const TreeMeshData& mesh, const std::string& path)
 
 // 导出 USD Nanite Assembly(.usda 文本)。返回是否成功。
 bool exportUSD(const TreeMeshData& mesh, const std::string& path) {
-    // 带骨架(散布用枝干为 SpeedTree 骨骼 FBX): 走骨骼 Nanite Assembly, 兼容 DynamicWind 骨骼风效。
-    if (mesh.hasSkeleton())
+    // 带骨架且有蒙皮 base(散布用枝干为 SpeedTree 骨骼 FBX): 走骨骼 Nanite Assembly,
+    // 兼容 DynamicWind 骨骼风效。原生生成树只有骨架(可视化用)但无蒙皮 base,
+    // 此时走下面的静态网格导出路径, 不进骨骼分支(否则 exportSkeletalUSD 因 skinBase 空而失败)。
+    if (mesh.hasSkeleton() && !mesh.skinBase.pts.empty())
         return exportSkeletalUSD(mesh, path);
 
     std::ofstream f(path);

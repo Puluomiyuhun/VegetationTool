@@ -59,6 +59,7 @@ struct TrunkParams {
     int   sides       = 8;
     int   lengthSegs  = 10;
     int   seed        = 1;
+    int   boneCount   = 3;      // 骨骼可视化/绑骨: 该枝干沿长度切成几根骨(1=整根一骨)
     float uvTilingU   = 1.0f;   // 树皮纹理沿枝干周向的平铺次数
     float uvTilingV   = 3.0f;   // 树皮纹理沿枝干长度的平铺次数
     MaterialParams material = {{0.38f,0.22f,0.10f}, 0.85f, 0.0f, 0.5f, 0.0f};
@@ -90,6 +91,7 @@ struct BranchParams {
     int   sides        = 6;
     int   lengthSegs   = 6;
     int   seed         = 2;
+    int   boneCount    = 2;      // 绑骨: 每根枝沿长度切成几根骨(弯曲枝条取大值更精细)
     float uvTilingU    = 1.0f;   // 树皮纹理沿枝条周向的平铺次数
     float uvTilingV    = 2.0f;   // 树皮纹理沿枝条长度的平铺次数
     // ---- Variance(每根实例随机偏移, 绝对±范围; 0=关闭, 与该参数同单位) ----
@@ -120,6 +122,7 @@ struct TwigParams {
     int   lengthSegs   = 5;
     bool  alternating  = true;
     int   seed         = 3;
+    int   boneCount    = 1;      // 绑骨: 每根细枝沿长度切成几根骨(细枝一般 1 根即可)
     float uvTilingU    = 1.0f;   // 树皮纹理沿细枝周向的平铺次数
     float uvTilingV    = 1.0f;   // 树皮纹理沿细枝长度的平铺次数
     // ---- Variance(每根实例随机偏移, 绝对±范围; 0=关闭) ----
@@ -204,6 +207,7 @@ struct SpineParams {
     int   sides        = 5;      // 茎截面边数
     int   lengthSegs   = 12;     // 长度细分(越多脊线越平滑, Frond 叶带也越圆顺)
     int   seed         = 6;
+    int   boneCount    = 1;      // 绑骨: 每条叶轴沿长度切成几根骨
     float uvTilingU    = 1.0f;
     float uvTilingV    = 1.0f;
     // ---- Variance(每根实例随机偏移, 绝对±范围; 0=关闭) ----
@@ -296,6 +300,7 @@ struct CustomParams {
     int   sides        = 6;      // 截面边数
     int   lengthSegs   = 6;      // 长度细分
     int   seed         = 8;      // 随机种子(传给脚本 ctx.seed)
+    int   boneCount    = 2;      // 绑骨: 每根枝沿长度切成几根骨
     float uvTilingU    = 1.0f;
     float uvTilingV    = 2.0f;
     MaterialParams material = {{0.32f,0.18f,0.08f}, 0.88f, 0.0f, 0.55f, 0.0f};

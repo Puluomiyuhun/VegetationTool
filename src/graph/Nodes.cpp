@@ -150,6 +150,7 @@ bool TrunkNode::drawProperties() {
         changed |= ImGui::SliderFloat("UV Tiling U",  &params.uvTilingU,   0.1f, 20.0f);
         changed |= ImGui::SliderFloat("UV Tiling V",  &params.uvTilingV,   0.1f, 20.0f);
         changed |= ImGui::SliderInt  ("Seed",         &params.seed,        0, 999);
+        changed |= ImGui::SliderInt  ("Bone Count",   &params.boneCount,   0, 12);
     }
     if (ImGui::CollapsingHeader("Placement", ImGuiTreeNodeFlags_DefaultOpen)) {
         // 植株在场景中的位置(一个工程内可摆放多棵独立植被)
@@ -192,6 +193,7 @@ bool BranchNode::drawProperties() {
         changed |= ImGui::SliderFloat("Region End",    &params.regionEnd,    0.0f, 1.0f);
         changed |= ImGui::SliderFloat("Size Falloff",  &params.sizeFalloff,  0.0f, 1.0f);
         changed |= ImGui::SliderInt  ("Seed",          &params.seed,         0, 999);
+        changed |= ImGui::SliderInt  ("Bone Count",    &params.boneCount,    0, 8);
     }
     // Spine：单根枝条形态 —— 长度、粗细、下垂、弯曲
     if (ImGui::CollapsingHeader("Spine", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -233,6 +235,7 @@ bool TwigNode::drawProperties() {
         changed |= ImGui::SliderFloat("Region End",    &params.regionEnd,    0.0f, 1.0f);
         changed |= ImGui::Checkbox   ("Alternating",   &params.alternating);
         changed |= ImGui::SliderInt  ("Seed",          &params.seed,         0, 999);
+        changed |= ImGui::SliderInt  ("Bone Count",    &params.boneCount,    0, 6);
     }
     // Spine：单根细枝形态
     if (ImGui::CollapsingHeader("Spine", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -358,6 +361,7 @@ bool SpineNode::drawProperties() {
         changed |= ImGui::SliderInt  ("Length Segs",   &params.lengthSegs,   3, 24);
         changed |= ImGui::SliderFloat("UV Tiling U",   &params.uvTilingU,    0.1f, 10.0f);
         changed |= ImGui::SliderFloat("UV Tiling V",   &params.uvTilingV,    0.1f, 10.0f);
+        changed |= ImGui::SliderInt  ("Bone Count",    &params.boneCount,    0, 6);
     }
     if (ImGui::CollapsingHeader("Material", ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui::PushID("mat_spine");
@@ -536,6 +540,7 @@ bool CustomNode::drawProperties() {
         changed |= ImGui::SliderFloat("UV Tiling U",  &params.uvTilingU,   0.1f, 20.0f);
         changed |= ImGui::SliderFloat("UV Tiling V",  &params.uvTilingV,   0.1f, 20.0f);
         changed |= ImGui::SliderInt  ("Seed",         &params.seed,        0, 999);
+        changed |= ImGui::SliderInt  ("Bone Count",   &params.boneCount,   0, 8);
     }
     if (ImGui::CollapsingHeader("Material", ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui::PushID("mat_custom");
