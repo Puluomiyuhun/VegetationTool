@@ -1891,6 +1891,10 @@ void TreeGenerator::buildScatter(const ScatterNode* node,
         glm::vec3 off = m_scatterTrunkOffset;
         // 逐骨归类主导顶点: 每个 mesh 顶点归到其最大权重骨。供嫁接时按段取候选枝干顶点。
         std::vector<std::vector<int>> boneVerts(bones.size());
+        // 逐骨"任意权重"顶点(权重 > 阈值即计入, 不要求主导)。用于叶段候选池:
+        // 枝根环顶点常在本段骨与父骨间约 50/50 蒙皮, 主导权归了父骨 → 被 boneVerts 漏掉,
+        // 导致候选池够不到枝根、首叶漂到枝中段。用 boneVertsAny 补回这些共享根环顶点。
+        std::vector<std::vector<int>> boneVertsAny(bones.size());
         {
             const auto& mp = *m_scatterTrunk;
             if (!mp.boneIdx.empty() && mp.boneIdx.size() == mp.positions.size()) {
@@ -1898,9 +1902,12 @@ void TreeGenerator::buildScatter(const ScatterNode* node,
                     const glm::ivec4& bidx = mp.boneIdx[i];
                     const glm::vec4&  bwt  = mp.boneWt[i];
                     int dom = -1; float best = 0.0f;
-                    for (int k = 0; k < 4; ++k)
-                        if (bidx[k] >= 0 && bwt[k] > best) { best = bwt[k]; dom = bidx[k]; }
-                    if (dom >= 0 && dom < (int)boneVerts.size()) boneVerts[dom].push_back(i);
+                    for (int k = 0; k < 4; ++k) {
+                        if (bidx[k] < 0 || bidx[k] >= (int)boneVerts.size()) continue;
+                        if (bwt[k] > best) { best = bwt[k]; dom = bidx[k]; }
+                        if (bwt[k] > 0.2f) boneVertsAny[bidx[k]].push_back(i);   // 任意较大权重
+                    }
+                    if (dom >= 0) boneVerts[dom].push_back(i);
                 }
             }
         }
@@ -1912,52 +1919,58 @@ void TreeGenerator::buildScatter(const ScatterNode* node,
         }
         float invH = (maxY - minY > 1e-4f) ? 1.0f / (maxY - minY) : 0.0f;
         std::vector<int> cand;
-        // 预建: 段号 -> 该段骨列表; 段根 = 父骨属于其他段(或无父)的那根(取深度最小)。
-        // SpeedTree 一个叶段常由多根骨(Bone_N_Start/_End)组成, 撒叶要覆盖整段而非仅末端骨。
-        std::unordered_map<int, std::vector<int>> segToBones;
-        for (int bi = 0; bi < (int)bones.size(); ++bi)
-            if (bones[bi].segment >= 0) segToBones[bones[bi].segment].push_back(bi);
-        auto segRootOf = [&](int sg) -> int {
-            int root = -1, rootDepth = (1 << 30);
-            auto it = segToBones.find(sg);
-            if (it == segToBones.end()) return -1;
-            for (int b : it->second) {
-                int par = bones[b].parent;
-                if (par < 0 || bones[par].segment != sg) {   // 段根: 父不在本段
-                    int d = 0;
-                    for (int p = bones[b].parent; p >= 0; p = bones[p].parent) ++d;
-                    if (d < rootDepth) { rootDepth = d; root = b; }
-                }
-            }
-            return root;
-        };
+        // 每根骨的子骨数量: 用于把"叶枝"识别为一条从 leafTwig 骨向上、直到上游分叉点的
+        // 线性骨链(与分段无关)。SpeedTree 一条枝可能跨多个 Bone_N 段, 仅靠段号找根会
+        // 把跨段枝的"末段首骨"当成枝根, 导致 rootN 落到枝尖 → twigDir 反向、叶子全朝反。
+        std::vector<int> childCount(bones.size(), 0);
+        for (int b = 0; b < (int)bones.size(); ++b)
+            if (bones[b].parent >= 0) ++childCount[bones[b].parent];
         for (int bi = 0; bi < (int)bones.size(); ++bi) {
             if (!bones[bi].leafTwig) continue;
             int par = bones[bi].parent;
             if (par < 0) continue;
             int sg = bones[bi].segment;
-            int rootBone = (sg >= 0) ? segRootOf(sg) : -1;
-            // 段根骨 = 叶段与上级枝的连接根部(Region Start=0 的锚点)。无段号时回退到直接父骨。
-            glm::vec3 rootN = (rootBone >= 0) ? bones[rootBone].restPos : bones[par].restPos;
-            glm::vec3 tipN  = bones[bi].restPos;
-            glm::vec3 start = rootN * s + off;                // 世界(缩放+平移)骨位
-            glm::vec3 end   = tipN  * s + off;
-            glm::vec3 twigDirW = end - start;                 // 沿枝方向(供叶轴抬升参考)
-            float g01 = (0.5f * (start.y + end.y) - minY) * invH;  // 段中点归一高度
-            // 候选枝干顶点: 整个叶段(该段所有骨主导顶点)合并, 使 Region 从枝根覆盖到枝梢。
-            // 叶端骨常延伸到空中(原树叶位)无自身顶点, 靠合并整段其它骨顶点避免悬空。
-            cand.clear();
-            if (sg >= 0) {
-                auto it = segToBones.find(sg);
-                if (it != segToBones.end())
-                    for (int b : it->second)
-                        if (b < (int)boneVerts.size() && !boneVerts[b].empty())
-                            cand.insert(cand.end(), boneVerts[b].begin(), boneVerts[b].end());
+            // 叶枝骨链: 从 leafTwig 骨 bi 向上收集, 直到遇到上游分叉(父骨有多个子)或换到
+            // 更上游的粗枝。这条线性链 = 一条完整的叶枝(可跨多个 Bone_N 段)。链首 = 真实枝根。
+            // 这样 1 骨 / 2 骨 / 跨段多骨 都统一按"骨链首尾"定枝根枝尖, 不会因末段首骨被误判为根而反向。
+            std::vector<int> chain;
+            {
+                int c = bi;
+                chain.push_back(c);
+                while (bones[c].parent >= 0) {
+                    int pp = bones[c].parent;
+                    // 父骨若为分叉点(带多个子)则停在当前骨: 再往上属于粗枝/其它枝, 不算本叶枝。
+                    if (childCount[pp] > 1) break;
+                    chain.push_back(pp);
+                    c = pp;
+                }
             }
+            int rootBone = chain.back();   // 链首(最上游) = 枝根骨
+            // 候选枝干顶点: 叶枝骨链上所有骨的"任意权重"顶点合并, 使 Region 从枝根覆盖到枝梢。
+            // 用 boneVertsAny(含共享根环顶点)而非仅主导顶点, 否则枝根环顶点被父骨抢走 → 首叶漂中段。
+            // 叶端骨常延伸到空中(原树叶位)无自身顶点, 靠合并整链其它骨顶点避免悬空。去重防重复采样。
+            cand.clear();
+            for (int b : chain)
+                if (b < (int)boneVertsAny.size() && !boneVertsAny[b].empty())
+                    cand.insert(cand.end(), boneVertsAny[b].begin(), boneVertsAny[b].end());
             if (cand.empty())
-                cand = !boneVerts[bi].empty() ? boneVerts[bi] : boneVerts[par];
+                cand = !boneVertsAny[bi].empty() ? boneVertsAny[bi] : boneVertsAny[par];
+            if (!cand.empty()) { std::sort(cand.begin(), cand.end()); cand.erase(std::unique(cand.begin(), cand.end()), cand.end()); }
+            if (cand.empty()) continue;
+            // Region Start 锚定: 骨链首骨(枝根骨)的原点 restPos = 枝最根部(已在 Blender 核对)。
+            // 直接用它当 t=0 锚点, 不再从候选顶点反推枝根(反推会因根环顶点被父骨蒙皮权重抢走而漂)。
+            // 枝尖 tipN 取候选顶点里离枝根最远者定枝长轴 → twigDir 恒由枝根指向枝尖, 不再反向。
+            const auto& pos = m_scatterTrunk->positions;
+            (void)sg;
+            glm::vec3 rootN = bones[rootBone].restPos;
+            glm::vec3 tipN = rootN; float far = -1.0f;
+            for (int vi : cand) { float d = glm::length(pos[vi] - rootN); if (d > far) { far = d; tipN = pos[vi]; } }
+            glm::vec3 start = rootN * s + off;                // 世界(缩放+平移)枝根(首骨原点)
+            glm::vec3 end   = tipN  * s + off;                // 世界枝尖(最远候选顶点)
+            glm::vec3 twigDirW = end - start;                 // 真实枝长轴, 由枝根指向枝尖
+            float g01 = (0.5f * (start.y + end.y) - minY) * invH;  // 段中点归一高度
             scatterSegment(twigDirW, rootN, tipN,
-                           g01, bi, cand);  // native 骨位: 轴向进度锚定到叶段根部
+                           g01, bi, cand);  // 轴向进度锚定到首骨(真实枝根)
         }
     } else {
         // 退化路径: 沿父级 rings 撒 count 片(无骨骼枝干)。
